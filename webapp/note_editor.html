@@ -168,26 +168,6 @@
             color: var(--tg-theme-hint-color, #999999);
         }
 
-        .debug-panel {
-            position: fixed;
-            bottom: 80px;
-            left: 10px;
-            right: 10px;
-            background: rgba(0, 0, 0, 0.8);
-            color: #0f0;
-            padding: 10px;
-            border-radius: 8px;
-            font-size: 11px;
-            font-family: monospace;
-            max-height: 150px;
-            overflow-y: auto;
-            z-index: 9999;
-        }
-
-        .debug-panel .debug-line {
-            margin: 2px 0;
-        }
-
         @media (max-width: 600px) {
             body {
                 padding: 12px;
@@ -242,43 +222,33 @@ You can use Markdown:
         </form>
     </div>
 
-    <!-- Debug Panel -->
-    <div class="debug-panel" id="debugPanel">
-        <div class="debug-line">🐛 Debug Log:</div>
-    </div>
-
     <script>
-        // Debug logging function
-        function debugLog(message) {
-            console.log(message);
-            const panel = document.getElementById('debugPanel');
-            const line = document.createElement('div');
-            line.className = 'debug-line';
-            line.textContent = new Date().toLocaleTimeString() + ': ' + message;
-            panel.appendChild(line);
-            panel.scrollTop = panel.scrollHeight;
-        }
-
-        debugLog('Web App starting...');
-
-        // Initialize Telegram Web App
+        // Security: This page must be opened from Telegram
         const tg = window.Telegram?.WebApp;
 
-        if (!tg) {
-            alert('ERROR: Telegram WebApp object not found! This page must be opened from Telegram.');
-            document.body.innerHTML = '<div style="padding: 20px; text-align: center;"><h2>⚠️ Error</h2><p>This page must be opened from Telegram Bot</p></div>';
-            throw new Error('Telegram WebApp not available');
-        }
+        // Check if running inside Telegram Web App
+        // Multiple checks to ensure it's really from Telegram
+        const isInTelegram = tg && (
+            tg.initData !== undefined ||  // Has initData property
+            tg.version !== undefined ||   // Has version property
+            window.parent !== window      // Running in iframe (Telegram uses iframes)
+        );
 
-        debugLog('Telegram WebApp found!');
-        debugLog('Version: ' + tg.version);
-        debugLog('Platform: ' + tg.platform);
+        if (!isInTelegram) {
+            // Not opened from Telegram - block access
+            document.body.innerHTML = `
+                <div style="font-family: sans-serif; text-align: center; padding: 50px; max-width: 500px; margin: 0 auto;">
+                    <h1 style="color: #e74c3c;">🔒 Access Denied</h1>
+                    <p style="font-size: 18px; margin: 20px 0;">This page can only be accessed through the Telegram Bot.</p>
+                    <p style="color: #7f8c8d;">Please use the /note command in your Telegram bot to access this editor.</p>
+                </div>
+            `;
+            throw new Error('Unauthorized: Not opened from Telegram');
+        }
 
         // Ready the Web App
         tg.ready();
         tg.expand();
-
-        debugLog('WebApp ready and expanded');
 
         // Get note data from URL parameters
         const urlParams = new URLSearchParams(window.location.search);
@@ -354,18 +324,11 @@ You can use Markdown:
 
         // Event handler for save button
         tg.MainButton.onClick(function() {
-            debugLog('💾 Save button CLICKED!');
-
             const title = document.getElementById('title').value.trim();
             const tags = document.getElementById('tags').value.trim();
             const content = document.getElementById('content').value;
 
-            debugLog('Title: ' + title);
-            debugLog('Tags: ' + tags);
-            debugLog('Content length: ' + content.length);
-
             if (!title) {
-                debugLog('❌ Validation failed: no title');
                 tg.showAlert('Please enter a title for the note');
                 return;
             }
@@ -380,38 +343,17 @@ You can use Markdown:
             try {
                 // Send data back to bot
                 const jsonData = JSON.stringify(formData);
-                debugLog('✅ JSON created, length: ' + jsonData.length);
-
                 tg.sendData(jsonData);
-                debugLog('📤 Data sent to bot! Closing...');
-
                 // The web app will close automatically after sendData
             } catch (error) {
-                debugLog('❌ Error: ' + error.message);
                 tg.showAlert('Error saving note: ' + error.message);
             }
         });
 
-        debugLog('Save button handler registered');
-
         tg.MainButton.show();
-        debugLog('Main button shown');
 
         // Initial validation state
         updateButtonState();
-        debugLog('Initial button state updated');
-
-        // Log final state
-        debugLog('✅ Setup complete!');
-        debugLog('Button visible: ' + tg.MainButton.isVisible);
-
-        // Test if button works
-        setTimeout(() => {
-            debugLog('--- 1 second test ---');
-            const hasTitle = document.getElementById('title').value.trim().length > 0;
-            debugLog('Has title: ' + hasTitle);
-            debugLog('Button should be: ' + (hasTitle ? 'enabled' : 'disabled'));
-        }, 1000);
     </script>
 </body>
 </html>

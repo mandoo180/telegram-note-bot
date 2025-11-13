@@ -169,6 +169,9 @@ class TelegramNoteBot:
             params['tags'] = ','.join(note.tags) if note.tags else ''
             params['content'] = note.content
 
+        # Add security token
+        params['_token'] = self.webapp_server.generate_token()
+
         webapp_url = f"{self.webapp_server.get_url('note_editor.html', base_url=Config.WEBAPP_BASE_URL)}?{urlencode(params)}"
 
         # Create reply keyboard with Web App button
@@ -270,6 +273,9 @@ class TelegramNoteBot:
             params['end_datetime'] = schedule.end_datetime.isoformat()
             params['reminder_minutes'] = str(schedule.reminder_minutes) if schedule.reminder_minutes else '0'
             params['description'] = schedule.description
+
+        # Add security token
+        params['_token'] = self.webapp_server.generate_token()
 
         webapp_url = f"{self.webapp_server.get_url('schedule_editor.html', base_url=Config.WEBAPP_BASE_URL)}?{urlencode(params)}"
 
@@ -580,6 +586,9 @@ class TelegramNoteBot:
             params['tags'] = ','.join(note.tags) if note.tags else ''
             params['content'] = note.content
 
+        # Add security token
+        params['_token'] = self.webapp_server.generate_token()
+
         webapp_url = f"{self.webapp_server.get_url('note_editor.html', base_url=Config.WEBAPP_BASE_URL)}?{urlencode(params)}"
 
         # Create reply keyboard with Web App button
@@ -639,6 +648,9 @@ class TelegramNoteBot:
             'reminder_minutes': str(schedule.reminder_minutes) if schedule.reminder_minutes else '0',
             'description': schedule.description
         }
+
+        # Add security token
+        params['_token'] = self.webapp_server.generate_token()
 
         webapp_url = f"{self.webapp_server.get_url('schedule_editor.html', base_url=Config.WEBAPP_BASE_URL)}?{urlencode(params)}"
 

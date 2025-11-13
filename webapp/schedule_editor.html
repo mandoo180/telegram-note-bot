@@ -182,40 +182,33 @@ You can use Markdown:
         </form>
     </div>
 
-    <!-- Debug Panel -->
-    <div style="position: fixed; bottom: 80px; left: 10px; right: 10px; background: rgba(0, 0, 0, 0.8); color: #0f0; padding: 10px; border-radius: 8px; font-size: 11px; font-family: monospace; max-height: 150px; overflow-y: auto; z-index: 9999;" id="debugPanel">
-        <div>🐛 Debug Log:</div>
-    </div>
-
     <script>
-        // Debug logging function
-        function debugLog(message) {
-            console.log(message);
-            const panel = document.getElementById('debugPanel');
-            const line = document.createElement('div');
-            line.textContent = new Date().toLocaleTimeString() + ': ' + message;
-            panel.appendChild(line);
-            panel.scrollTop = panel.scrollHeight;
-        }
-
-        debugLog('Schedule editor starting...');
-
-        // Initialize Telegram Web App
+        // Security: This page must be opened from Telegram
         const tg = window.Telegram?.WebApp;
 
-        if (!tg) {
-            alert('ERROR: Telegram WebApp object not found! This page must be opened from Telegram.');
-            document.body.innerHTML = '<div style="padding: 20px; text-align: center;"><h2>⚠️ Error</h2><p>This page must be opened from Telegram Bot</p></div>';
-            throw new Error('Telegram WebApp not available');
-        }
+        // Check if running inside Telegram Web App
+        // Multiple checks to ensure it's really from Telegram
+        const isInTelegram = tg && (
+            tg.initData !== undefined ||  // Has initData property
+            tg.version !== undefined ||   // Has version property
+            window.parent !== window      // Running in iframe (Telegram uses iframes)
+        );
 
-        debugLog('Telegram WebApp found!');
+        if (!isInTelegram) {
+            // Not opened from Telegram - block access
+            document.body.innerHTML = `
+                <div style="font-family: sans-serif; text-align: center; padding: 50px; max-width: 500px; margin: 0 auto;">
+                    <h1 style="color: #e74c3c;">🔒 Access Denied</h1>
+                    <p style="font-size: 18px; margin: 20px 0;">This page can only be accessed through the Telegram Bot.</p>
+                    <p style="color: #7f8c8d;">Please use the /schedule command in your Telegram bot to access this editor.</p>
+                </div>
+            `;
+            throw new Error('Unauthorized: Not opened from Telegram');
+        }
 
         // Ready the Web App
         tg.ready();
         tg.expand();
-
-        debugLog('WebApp ready and expanded');
 
         // Get schedule data from URL parameters
         const urlParams = new URLSearchParams(window.location.search);
@@ -254,7 +247,6 @@ You can use Markdown:
             // New schedule - set default to current time
             const now = new Date();
             document.getElementById('start').value = formatDatetimeLocal(now);
-            debugLog('Set default start time to: ' + formatDatetimeLocal(now));
         }
 
         if (existingEnd) {
@@ -268,7 +260,6 @@ You can use Markdown:
             const oneHourLater = new Date();
             oneHourLater.setHours(oneHourLater.getHours() + 1);
             document.getElementById('end').value = formatDatetimeLocal(oneHourLater);
-            debugLog('Set default end time to: ' + formatDatetimeLocal(oneHourLater));
         }
 
         if (existingReminder) {
@@ -325,8 +316,6 @@ You can use Markdown:
             const hasEnd = endInput.value.length > 0;
             const shouldEnable = hasTitle && hasStart && hasEnd;
 
-            debugLog('Button state check: title=' + hasTitle + ', start=' + hasStart + ', end=' + hasEnd + ' -> ' + (shouldEnable ? 'ENABLE' : 'DISABLE'));
-
             if (shouldEnable) {
                 tg.MainButton.setText('Save Schedule');
                 tg.MainButton.enable();
@@ -337,18 +326,14 @@ You can use Markdown:
         }
 
         titleInput.addEventListener('input', () => {
-            debugLog('Title input changed: "' + titleInput.value + '"');
             updateButtonState();
         });
 
         startInput.addEventListener('input', () => {
-            debugLog('⏰ Start input changed: ' + startInput.value);
             updateButtonState();
         });
 
         startInput.addEventListener('change', () => {
-            debugLog('⏰ Start CHANGE event: ' + startInput.value);
-
             // If start time is bigger than end time, set end time = start time
             if (startInput.value && endInput.value) {
                 const startDate = new Date(startInput.value);
@@ -356,7 +341,6 @@ You can use Markdown:
 
                 if (startDate > endDate) {
                     endInput.value = startInput.value;
-                    debugLog('⚠️ Start > End, adjusted end time to: ' + endInput.value);
                 }
             }
 
@@ -364,13 +348,10 @@ You can use Markdown:
         });
 
         endInput.addEventListener('input', () => {
-            debugLog('⏰ End input changed: ' + endInput.value);
             updateButtonState();
         });
 
         endInput.addEventListener('change', () => {
-            debugLog('⏰ End CHANGE event: ' + endInput.value);
-
             // If end time is smaller than start time, set start time = end time
             if (startInput.value && endInput.value) {
                 const startDate = new Date(startInput.value);
@@ -378,7 +359,6 @@ You can use Markdown:
 
                 if (endDate < startDate) {
                     startInput.value = endInput.value;
-                    debugLog('⚠️ End < Start, adjusted start time to: ' + startInput.value);
                 }
             }
 
@@ -391,30 +371,19 @@ You can use Markdown:
 
         // Event handler for save button
         tg.MainButton.onClick(function() {
-            debugLog('💾 Save button CLICKED!');
-
             const title = titleInput.value.trim();
             const start = startInput.value; // datetime-local value (YYYY-MM-DDTHH:MM)
             const end = endInput.value; // datetime-local value (YYYY-MM-DDTHH:MM)
             const reminderMinutes = document.getElementById('reminderMinutes').value.trim();
             const description = document.getElementById('description').value;
 
-            debugLog('Name: ' + scheduleName);
-            debugLog('Title: ' + title);
-            debugLog('Start: ' + start);
-            debugLog('End: ' + end);
-            debugLog('Reminder: ' + reminderMinutes);
-            debugLog('Description length: ' + description.length);
-
             if (!title || !start || !end) {
-                debugLog('❌ Validation failed: missing required fields');
                 tg.showAlert('Please fill in all required fields (title, start time, end time)');
                 return;
             }
 
             // Validate that end is not before start (equal is allowed)
             if (new Date(end) < new Date(start)) {
-                debugLog('❌ Validation failed: end time before start');
                 tg.showAlert('End time cannot be before start time');
                 return;
             }
@@ -432,47 +401,18 @@ You can use Markdown:
             try {
                 // Send data back to bot
                 const jsonData = JSON.stringify(formData);
-                debugLog('✅ JSON created, length: ' + jsonData.length);
-                debugLog('Full JSON: ' + jsonData);
-
                 tg.sendData(jsonData);
-                debugLog('📤 Data sent to bot! Closing...');
-
                 // The web app will close automatically after sendData
             } catch (error) {
-                debugLog('❌ Error: ' + error.message);
                 tg.showAlert('Error saving schedule: ' + error.message);
             }
         });
 
-        debugLog('Save button handler registered');
-
         tg.MainButton.show();
-        debugLog('Main button shown');
 
         // Initial validation state
         tg.MainButton.setText('Fill all required fields (*)');
         updateButtonState();
-        debugLog('Initial button state updated');
-
-        // Log final state
-        debugLog('✅ Setup complete!');
-        debugLog('Button visible: ' + tg.MainButton.isVisible);
-        debugLog('Form loaded with: ' + scheduleName);
-
-        // Test if button works after 1 second
-        setTimeout(() => {
-            debugLog('--- 1 second test ---');
-            const hasTitle = titleInput.value.trim().length > 0;
-            const hasStart = startInput.value.length > 0;
-            const hasEnd = endInput.value.length > 0;
-            debugLog('Has title: ' + hasTitle);
-            debugLog('Has start: ' + hasStart);
-            debugLog('Has end: ' + hasEnd);
-            debugLog('Button should be: ' + (hasTitle && hasStart && hasEnd ? 'enabled' : 'disabled'));
-            debugLog('Button is active: ' + tg.MainButton.isActive);
-            debugLog('Button text: ' + tg.MainButton.text);
-        }, 1000);
     </script>
 </body>
 </html>

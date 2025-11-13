@@ -21,6 +21,24 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
+# Check if user has docker permissions
+if ! docker ps &> /dev/null; then
+    echo -e "${RED}❌ Docker permission denied${NC}"
+    echo ""
+    echo "Your user needs to be in the 'docker' group."
+    echo ""
+    echo "Quick fix (run these commands):"
+    echo "  sudo usermod -aG docker \$USER"
+    echo "  newgrp docker"
+    echo ""
+    echo "Or log out and back in for group changes to take effect:"
+    echo "  exit"
+    echo "  ssh -i your-key.pem ubuntu@YOUR_EC2_IP"
+    echo ""
+    echo "Then run this script again."
+    exit 1
+fi
+
 # Check if docker compose is available
 if ! docker compose version &> /dev/null; then
     echo -e "${RED}❌ Docker Compose is not installed${NC}"
@@ -28,7 +46,7 @@ if ! docker compose version &> /dev/null; then
     exit 1
 fi
 
-echo -e "${GREEN}✅ Docker is installed${NC}"
+echo -e "${GREEN}✅ Docker is installed and accessible${NC}"
 echo ""
 
 # Setup environment file
