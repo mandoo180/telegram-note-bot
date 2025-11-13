@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "emacs": {
+      "type": "stdio",
+      "command": "/Users/kyeongsoo/Projects/mcp-emacs/venv/bin/python",
+      "args": [
+        "/Users/kyeongsoo/Projects/mcp-emacs/src/mcp_emacs/server.py"
+      ]
+    }
+  }
+}

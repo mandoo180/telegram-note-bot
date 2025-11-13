@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  telegram-note:
+    build: .
+    container_name: telegram-note-bot
+    restart: unless-stopped
+
+    # Environment variables
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - DATABASE_PATH=/app/data/telegram_note.db
+      - WEBAPP_BASE_URL=${WEBAPP_BASE_URL}
+      - WEBAPP_PORT=8000
+
+    # Port mapping (for Web App server)
+    ports:
+      - "${WEBAPP_PORT:-8000}:8000"
+
+    # Volume for persistent database storage
+    volumes:
+      - ./data:/app/data
+      - ./webapp:/app/webapp  # Mount webapp for hot-reload during development
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; exit(0 if os.path.exists('/app/data/telegram_note.db') else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+# Define named volumes (optional, for cleaner organization)
+volumes:
+  data:
+    driver: local

@@ -1,0 +1,21 @@
+#+title: Telegram Note
+#+date: <2025-11-10 Mon>
+
+This project is telegram-bot that saves notes, schedules personal events and sends notification as reminders.
+
+* Slash Commands
+
+- =/notes <keyword/tag>=: list up notes
+- =/note <name>=: open a note or add new note in markdown mode to a specific path
+- =/schedules <period>=: list up schedules
+- =/schedule <name>=: open a schedule
+
+** Note
+
+When the user open a note, user can edit title, and tags and content in markdown format.
+
+** Schedule
+
+When the user opens a schedule, user can edit the start & end datetime, title, description and reminder which sends notifications can be set like n minutes, n hours, n days before the event.
+
+
