@@ -150,7 +150,7 @@ class ReminderService:
                 SELECT s.*, r.reminder_time
                 FROM schedules s
                 JOIN reminders r ON s.id = r.schedule_id
-                WHERE r.sent = FALSE AND r.reminder_time > datetime('now')
+                WHERE r.sent = FALSE AND r.reminder_time > datetime('now', 'localtime')
                 """
             )
             rows = cursor.fetchall()
