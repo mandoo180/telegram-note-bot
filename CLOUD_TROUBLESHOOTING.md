@@ -2,6 +2,72 @@
 
 This guide helps diagnose and fix issues when running the Telegram Note bot on a cloud server.
 
+## Docker Deployment Issues
+
+### Timezone Configuration (CRITICAL for Reminders)
+
+**Problem:** Docker containers default to UTC timezone, which causes reminders to fire at wrong times or not at all.
+
+**Symptom:** Reminders scheduled for 3:00 PM KST fire at midnight or don't fire at all.
+
+**Solution:** The timezone is now configured in three places:
+
+1. **Dockerfile** - Sets `TZ=Asia/Seoul` by default
+2. **docker-compose.yml** - Mounts host timezone files and sets `TZ` environment variable
+3. **.env** - Allows you to override timezone
+
+**To verify timezone in container:**
+```bash
+# Check container timezone
+docker exec telegram-note-bot date
+docker exec telegram-note-bot python -c "from datetime import datetime; print(datetime.now())"
+
+# Should show your local time (e.g., KST), not UTC
+```
+
+**To change timezone:**
+Edit your `.env` file:
+```bash
+TZ=America/New_York  # Or your timezone
+```
+
+Then rebuild and restart:
+```bash
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
+```
+
+**Common timezones:**
+- `Asia/Seoul` - Korea
+- `Asia/Tokyo` - Japan
+- `America/New_York` - US Eastern
+- `America/Los_Angeles` - US Pacific
+- `Europe/London` - UK
+- `Europe/Paris` - Central Europe
+
+[Full list](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones)
+
+### Verify Timezone Fix
+
+After rebuilding, verify everything is correct:
+
+```bash
+# 1. Check container timezone
+docker exec telegram-note-bot date
+
+# 2. Check Python datetime
+docker exec telegram-note-bot python -c "from datetime import datetime; print('Python time:', datetime.now())"
+
+# 3. Check SQLite datetime
+docker exec telegram-note-bot sqlite3 /app/data/telegram_note.db "SELECT datetime('now', 'localtime') as local, datetime('now') as utc"
+
+# 4. Run diagnostic script
+docker exec telegram-note-bot python check_reminders.py
+
+# All times should match your local timezone
+```
+
 ## Quick Diagnostic Script
 
 Upload and run the `check_reminders.py` script on your cloud server:
@@ -301,6 +367,47 @@ ulimit -a
 [Service]
 LimitNOFILE=4096
 LimitNPROC=512
+```
+
+## Docker Quick Reference
+
+If using Docker deployment:
+
+```bash
+# View logs
+docker logs -f telegram-note-bot
+docker logs --tail 100 telegram-note-bot
+
+# Check container status
+docker ps | grep telegram-note
+docker-compose ps
+
+# Restart container
+docker-compose restart
+
+# Rebuild and restart (after code changes)
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
+
+# Run commands inside container
+docker exec telegram-note-bot python check_reminders.py
+docker exec telegram-note-bot sqlite3 /app/data/telegram_note.db "SELECT * FROM reminders"
+
+# Access container shell
+docker exec -it telegram-note-bot /bin/bash
+
+# Check timezone
+docker exec telegram-note-bot date
+docker exec telegram-note-bot cat /etc/timezone
+
+# View container environment
+docker exec telegram-note-bot env | grep TZ
+
+# Clean up and fresh start
+docker-compose down -v  # WARNING: Removes volumes (database!)
+docker-compose build --no-cache
+docker-compose up -d
 ```
 
 ## Getting Help

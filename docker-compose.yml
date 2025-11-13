@@ -12,6 +12,7 @@ services:
       - DATABASE_PATH=/app/data/telegram_note.db
       - WEBAPP_BASE_URL=${WEBAPP_BASE_URL}
       - WEBAPP_PORT=8000
+      - TZ=${TZ:-Asia/Seoul}  # Set timezone (defaults to Asia/Seoul)
 
     # Port mapping (for Web App server)
     ports:
@@ -21,6 +22,8 @@ services:
     volumes:
       - ./data:/app/data
       - ./webapp:/app/webapp  # Mount webapp for hot-reload during development
+      - /etc/localtime:/etc/localtime:ro  # Mount host timezone (alternative method)
+      - /etc/timezone:/etc/timezone:ro
 
     # Health check
     healthcheck:

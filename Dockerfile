@@ -8,12 +8,16 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    TZ=Asia/Seoul
 
 # Install system dependencies (if needed)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     sqlite3 \
+    tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+    && echo $TZ > /etc/timezone \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better layer caching
@@ -26,6 +30,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src/ ./src/
 COPY webapp/ ./webapp/
 COPY init_db.py .
+COPY check_reminders.py .
 
 # Create directory for database
 RUN mkdir -p /app/data
