@@ -1,0 +1,489 @@
+#+TITLE: Deployment Guide
+#+AUTHOR: Telegram Note Bot
+#+DATE: 2025
+
+* Table of Contents :TOC:
+- [[#quick-deploy-aws-ec2][Quick Deploy (AWS EC2)]]
+- [[#docker-deployment][Docker Deployment]]
+- [[#production-deployment][Production Deployment]]
+- [[#https-setup][HTTPS Setup]]
+- [[#management][Management]]
+
+* Quick Deploy (AWS EC2)
+
+Deploy to AWS EC2 in under 15 minutes.
+
+** Prerequisites
+
+- AWS account
+- SSH key pair
+- Telegram Bot Token from [[https://t.me/botfather][@BotFather]]
+
+** Step 1: Launch EC2 Instance
+
+1. Go to *AWS Console* → *EC2* → *Launch Instance*
+2. Configure:
+   - *AMI*: Ubuntu Server 22.04 LTS
+   - *Type*: t2.micro (free tier eligible)
+   - *Key pair*: Select or create new
+   - *Security Group*: Allow ports 22, 80, 443
+3. Click *Launch Instance*
+4. Note your *Public IP address*
+
+** Step 2: Setup EC2
+
+SSH into your instance:
+
+#+begin_src bash
+ssh -i your-key.pem ubuntu@YOUR_EC2_IP
+#+end_src
+
+Run setup:
+
+#+begin_src bash
+# Update system
+sudo apt-get update && sudo apt-get upgrade -y
+
+# Install Docker
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+sudo usermod -aG docker $USER
+
+# Install git
+sudo apt-get install -y git
+
+# Log out and back in for group changes
+exit
+ssh -i your-key.pem ubuntu@YOUR_EC2_IP
+#+end_src
+
+** Step 3: Deploy Bot
+
+#+begin_src bash
+# Clone repository
+git clone <your-repo-url> telegram-note
+cd telegram-note
+
+# Configure
+cp .env.example .env
+nano .env  # Edit with your settings
+#+end_src
+
+In =.env=, set:
+
+#+begin_example
+TELEGRAM_BOT_TOKEN=your_token_here
+DATABASE_PATH=/app/data/telegram_note.db
+WEBAPP_BASE_URL=http://YOUR_EC2_IP:8000
+WEBAPP_PORT=8000
+TZ=Asia/Seoul  # YOUR TIMEZONE - CRITICAL!
+#+end_example
+
+Deploy:
+
+#+begin_src bash
+# Create data directory
+mkdir -p data
+
+# Initialize database
+docker compose run --rm telegram-note python init_db.py
+
+# Start bot
+docker compose up -d
+
+# View logs
+docker compose logs -f
+#+end_src
+
+** Step 4: Test
+
+1. Open Telegram
+2. Message your bot: =/start=
+3. Try: =/note test=
+
+✅ *Your bot is now live!*
+
+** Step 5: Auto-Start on Boot
+
+#+begin_src bash
+sudo tee /etc/systemd/system/telegram-note.service > /dev/null <<'EOF'
+[Unit]
+Description=Telegram Note Bot
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/ubuntu/telegram-note
+ExecStart=/usr/bin/docker compose up -d
+ExecStop=/usr/bin/docker compose down
+User=ubuntu
+Group=ubuntu
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable telegram-note
+sudo systemctl start telegram-note
+#+end_src
+
+* Docker Deployment
+
+Comprehensive Docker deployment guide for any server.
+
+** Timezone Configuration (CRITICAL)
+
+⚠️ *Docker containers default to UTC*. Set your timezone correctly for reminders to work!
+
+*** Find Your Timezone
+
+Common timezones:
+- =Asia/Seoul= - South Korea
+- =Asia/Tokyo= - Japan
+- =America/New_York= - US Eastern
+- =America/Los_Angeles= - US Pacific
+- =Europe/London= - United Kingdom
+
+[[https://en.wikipedia.org/wiki/List_of_tz_database_time_zones][Full timezone list]]
+
+*** Configure Timezone
+
+Edit =.env=:
+
+#+begin_example
+TZ=Asia/Seoul  # Change to YOUR timezone
+#+end_example
+
+*** Verify Timezone
+
+After deployment:
+
+#+begin_src bash
+# Check container timezone (should show local time, NOT UTC)
+docker exec telegram-note-bot date
+
+# Check Python datetime
+docker exec telegram-note-bot python -c "from datetime import datetime; print(datetime.now())"
+
+# Run diagnostic
+docker exec telegram-note-bot python check_reminders.py
+#+end_src
+
+All times should match your local timezone, not UTC!
+
+** Deployment Steps
+
+#+begin_src bash
+# Clone
+git clone <repo-url>
+cd telegram-note
+
+# Configure
+cp .env.example .env
+nano .env  # Set TELEGRAM_BOT_TOKEN and TZ
+
+# Build
+docker-compose build
+
+# Initialize database
+mkdir -p data
+docker compose run --rm telegram-note python init_db.py
+
+# Start
+docker-compose up -d
+
+# Check logs
+docker-compose logs -f
+#+end_src
+
+** Docker Commands
+
+#+begin_src bash
+# View logs
+docker logs -f telegram-note-bot
+docker logs --tail 100 telegram-note-bot
+
+# Restart
+docker-compose restart
+
+# Rebuild after code changes
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
+
+# Run diagnostic
+docker exec telegram-note-bot python check_reminders.py
+
+# Access database
+docker exec -it telegram-note-bot sqlite3 /app/data/telegram_note.db
+
+# Access container shell
+docker exec -it telegram-note-bot /bin/bash
+
+# Check timezone
+docker exec telegram-note-bot date
+docker exec telegram-note-bot cat /etc/timezone
+#+end_src
+
+* Production Deployment
+
+** HTTPS Setup (Required for Web App)
+
+Telegram Web Apps *require HTTPS*. Choose one option:
+
+*** Option A: Nginx + Let's Encrypt
+
+For production with a custom domain.
+
+**** Install Nginx:
+
+#+begin_src bash
+sudo apt-get install -y nginx certbot python3-certbot-nginx
+#+end_src
+
+**** Configure DNS:
+
+Point your domain (e.g., =bot.yourdomain.com=) to your server IP.
+
+**** Create Nginx Configuration:
+
+#+begin_src bash
+sudo nano /etc/nginx/sites-available/telegram-note
+#+end_src
+
+Add:
+
+#+begin_src nginx
+server {
+    listen 80;
+    server_name bot.yourdomain.com;
+
+    location / {
+        proxy_pass http://localhost:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+#+end_src
+
+**** Enable and Get SSL:
+
+#+begin_src bash
+sudo ln -s /etc/nginx/sites-available/telegram-note /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+sudo certbot --nginx -d bot.yourdomain.com
+#+end_src
+
+**** Update =.env=:
+
+#+begin_example
+WEBAPP_BASE_URL=https://bot.yourdomain.com
+#+end_example
+
+Restart bot:
+
+#+begin_src bash
+docker-compose restart
+#+end_src
+
+*** Option B: Cloudflare Tunnel
+
+No domain required!
+
+#+begin_src bash
+# Install
+wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+sudo dpkg -i cloudflared-linux-amd64.deb
+
+# Setup
+cloudflared tunnel login
+cloudflared tunnel create telegram-note
+cloudflared tunnel route dns telegram-note bot
+
+# Run
+cloudflared tunnel run telegram-note
+#+end_src
+
+Update =.env= with the Cloudflare URL.
+
+*** Option C: ngrok (Development Only)
+
+#+begin_src bash
+# Install
+curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc
+echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+sudo apt update && sudo apt install ngrok
+
+# Authenticate
+ngrok authtoken YOUR_TOKEN
+
+# Run
+ngrok http 8000
+#+end_src
+
+Copy HTTPS URL to =.env=.
+
+** Security
+
+*** Firewall:
+
+#+begin_src bash
+sudo apt-get install -y ufw
+sudo ufw allow 22/tcp    # SSH
+sudo ufw allow 80/tcp    # HTTP
+sudo ufw allow 443/tcp   # HTTPS
+sudo ufw --force enable
+#+end_src
+
+*** File Permissions:
+
+#+begin_src bash
+chmod 600 .env
+chmod 600 data/telegram_note.db
+#+end_src
+
+*** Regular Backups:
+
+#+begin_src bash
+# Daily backup cron job (runs at 2 AM)
+crontab -e
+#+end_src
+
+Add:
+
+#+begin_example
+0 2 * * * cp /path/to/telegram-note/data/telegram_note.db /path/to/telegram-note/data/backup-$(date +\%Y\%m\%d).db
+#+end_example
+
+** Monitoring
+
+*** Health Check:
+
+#+begin_src bash
+# Check status
+docker ps | grep telegram-note
+docker inspect telegram-note-bot | grep -A 5 Health
+
+# Resource usage
+docker stats telegram-note-bot
+
+# Memory
+free -h
+#+end_src
+
+*** Automated Monitoring:
+
+Create =/usr/local/bin/check-telegram-bot.sh=:
+
+#+begin_src bash
+#!/bin/bash
+if ! docker ps | grep -q telegram-note-bot; then
+    echo "Bot is down! Restarting..."
+    cd /path/to/telegram-note
+    docker-compose up -d
+    # Send alert (email, Slack, etc.)
+fi
+#+end_src
+
+Add to crontab:
+
+#+begin_example
+,*/5 * * * * /usr/local/bin/check-telegram-bot.sh
+#+end_example
+
+* Management
+
+** Common Commands
+
+#+begin_src bash
+# View logs
+docker-compose logs -f
+
+# Restart
+docker-compose restart
+
+# Stop
+docker-compose down
+
+# Start
+docker-compose up -d
+
+# Update from git
+git pull
+docker-compose build --no-cache
+docker-compose up -d
+
+# Backup database
+cp data/telegram_note.db data/backup-$(date +%Y%m%d).db
+
+# Restore database
+cp data/backup-20250113.db data/telegram_note.db
+docker-compose restart
+#+end_src
+
+** Database Maintenance
+
+#+begin_src bash
+# Access database
+docker exec -it telegram-note-bot sqlite3 /app/data/telegram_note.db
+
+# Inside sqlite3:
+.tables
+SELECT * FROM reminders;
+DELETE FROM reminders WHERE sent = TRUE AND sent_at < datetime('now', '-30 days');
+VACUUM;
+.quit
+#+end_src
+
+** Testing Reminders
+
+Create a test reminder that fires in 2 minutes:
+
+1. =/schedule test-reminder=
+2. Set start time: (current time + 3 minutes)
+3. Set reminder: 1 minute before
+4. Save
+
+Monitor:
+
+#+begin_src bash
+docker logs -f telegram-note-bot | grep -i reminder
+#+end_src
+
+You should see:
+- =Scheduled reminder for schedule test-reminder at ...=
+- (After 2 min) =Sent reminder for schedule test-reminder to user ...=
+
+* Cost Estimation
+
+** AWS EC2 Deployment:
+
+- *EC2 t2.micro*: ~$8.50/month (Free tier: 750 hours/month for 12 months)
+- *EBS Storage 8GB*: ~$0.80/month
+- *Data Transfer*: Usually < $1/month
+- *Domain (optional)*: ~$12/year
+- *Total*: ~$10/month (or FREE for first year)
+
+** Other Cloud Providers:
+
+- *DigitalOcean*: $6/month droplet
+- *Linode*: $5/month Nanode
+- *Hetzner*: €4/month CX11
+
+* Next Steps
+
+After deployment:
+
+1. ✅ Bot is running
+2. 🔒 Setup HTTPS for Web App
+3. 💾 Configure automatic backups
+4. 📊 Setup monitoring
+5. 🔄 Configure CI/CD (optional)
+
+For troubleshooting, see [[file:troubleshooting.org][Troubleshooting Guide]].

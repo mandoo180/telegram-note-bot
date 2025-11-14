@@ -1,0 +1,333 @@
+#+TITLE: Testing Guide
+#+AUTHOR: Telegram Note Bot
+#+DATE: 2025
+
+* Web App Testing
+
+Guide for testing the note and schedule editors.
+
+** Prerequisites
+
+- Bot token configured in =.env=
+- Database initialized
+- HTTPS URL configured (ngrok for local, domain for production)
+
+* Local Testing with ngrok
+
+** Step 1: Start ngrok
+
+#+begin_src bash
+ngrok http 8000
+#+end_src
+
+Output:
+
+#+begin_example
+Forwarding  https://abc123.ngrok-free.app -> http://localhost:8000
+#+end_example
+
+Copy the HTTPS URL.
+
+** Step 2: Update Configuration
+
+Edit =.env=:
+
+#+begin_example
+WEBAPP_BASE_URL=https://abc123.ngrok-free.app
+#+end_example
+
+** Step 3: Start Bot
+
+#+begin_src bash
+# Activate virtual environment
+source venv/bin/activate
+
+# Run bot
+python src/main.py
+#+end_src
+
+Expected output:
+
+#+begin_example
+WebApp server started on http://0.0.0.0:8000
+Bot commands registered for auto-completion
+Application started
+#+end_example
+
+* Testing Note Editor
+
+** Create New Note
+
+1. Open Telegram bot
+2. Send: =/note test-note=
+3. Click *"📝 Edit Note"* button
+4. Web App should open in Telegram
+
+** Edit Note
+
+In the editor:
+
+1. *Title*: Enter "My First Note"
+2. *Tags*: Enter "test, personal"
+3. *Content*: Type with Markdown:
+
+#+begin_example
+This is **bold** and *italic*
+
+# Heading
+- List item 1
+- List item 2
+
+,`Code example`
+#+end_example
+
+4. Watch live preview update
+
+** Save Note
+
+1. Click *"Save Note"* button
+2. Web App closes
+3. Success message appears:
+
+#+begin_example
+✅ Note saved successfully!
+
+📝 My First Note
+🏷 Tags: test, personal
+
+(content preview)
+#+end_example
+
+** Verify
+
+#+begin_src
+/notes          # List all notes
+/note test-note # Open same note again
+#+end_src
+
+Note should load with saved content.
+
+* Testing Schedule Editor
+
+** Create New Schedule
+
+1. Send: =/schedule team-meeting=
+2. Click *"📅 Edit Schedule"* button
+3. Editor opens with datetime pickers
+
+** Edit Schedule
+
+1. *Title*: "Team Sync"
+2. *Start*: (Select future datetime)
+3. *End*: (Select after start time)
+4. *Reminder*: 30 (minutes before)
+5. *Description*:
+
+#+begin_example
+Weekly team meeting
+
+**Agenda:**
+- Project updates
+- Q&A
+#+end_example
+
+** Save Schedule
+
+1. Click *"Save Schedule"*
+2. Success message appears
+3. Reminder is scheduled
+
+** Verify Reminder
+
+#+begin_src bash
+# Check reminder was scheduled
+docker exec telegram-note-bot python check_reminders.py
+
+# Or check logs
+docker logs -f telegram-note-bot | grep -i reminder
+#+end_src
+
+Should show: =Scheduled reminder for schedule team-meeting at ...=
+
+* Testing Reminders
+
+** Create Test Reminder
+
+Create a reminder that fires in 2 minutes:
+
+1. =/schedule test-reminder=
+2. *Title*: "Test Reminder"
+3. *Start*: (Current time + 3 minutes)
+4. *End*: (Current time + 4 minutes)
+5. *Reminder*: 1 (minute before)
+6. Save
+
+** Monitor
+
+#+begin_src bash
+# Watch logs
+docker logs -f telegram-note-bot | grep -i reminder
+#+end_src
+
+Expected output:
+
+#+begin_example
+INFO - Scheduled reminder for schedule test-reminder at 2025-01-13 15:32
+...
+(After 2 minutes)
+INFO - Sent reminder for schedule test-reminder to user 123456
+#+end_example
+
+You'll receive notification in Telegram!
+
+* Testing Security
+
+** Token Validation
+
+1. Create a note: =/note security-test=
+2. Click editor button
+3. Copy the URL from browser (if Web App opens in browser)
+4. Try opening URL directly in new browser tab
+5. Should see: *"🔒 Access Denied"*
+
+Tokens are:
+- One-time use
+- Expire in 5 minutes
+- Server-side validated
+
+** Telegram Context Check
+
+Web App also checks it's opened from Telegram:
+
+#+begin_src javascript
+const isInTelegram = tg && (
+    tg.initData !== undefined ||
+    tg.version !== undefined ||
+    window.parent !== window
+);
+#+end_src
+
+* Troubleshooting Tests
+
+** Save Button Does Nothing
+
+Check logs:
+
+#+begin_src bash
+docker logs -f telegram-note-bot
+#+end_src
+
+Common issues:
+- WEBAPP_BASE_URL not set correctly
+- ngrok not running
+- Bot not restarted after .env change
+
+** Web App Doesn't Open
+
+- Verify ngrok shows HTTPS URL (not HTTP)
+- Check WEBAPP_BASE_URL in .env matches ngrok URL
+- Look for "WebApp server started" in bot logs
+
+** "Invalid Data" Error
+
+- Check bot logs for JSON parsing errors
+- Look for "Raw data:" log line
+- Verify all required fields are filled
+
+* Testing Without Web App
+
+If you don't want to setup HTTPS:
+
+** Text-Based Note Editing
+
+#+begin_example
+/note test-note
+My Title | tag1,tag2 | This is the content in **markdown**
+#+end_example
+
+Format: =title | tags | content=
+
+** Text-Based Schedule Editing
+
+#+begin_example
+/schedule meeting
+Team Sync | 2025-01-15 14:00 | 2025-01-15 15:00 | 30 | Weekly meeting
+#+end_example
+
+Format: =title | start | end | reminder_minutes | description=
+
+* Expected Log Messages
+
+** Successful Note Save:
+
+#+begin_example
+INFO - Received Web App data for note 'test-note' from user 123456
+INFO - Note 'test-note' saved successfully for user 123456 via Web App
+#+end_example
+
+** Successful Schedule Save:
+
+#+begin_example
+INFO - Received Web App data for schedule 'team-meeting' from user 123456
+INFO - Scheduled reminder for schedule team-meeting at 2025-01-15 13:30
+INFO - Schedule 'team-meeting' saved successfully for user 123456 via Web App
+#+end_example
+
+** Reminder Fired:
+
+#+begin_example
+INFO - Sent reminder for schedule team-meeting to user 123456
+#+end_example
+
+* Automated Testing
+
+For CI/CD, you can test basic functionality:
+
+#+begin_src bash
+# Test database initialization
+docker compose run --rm telegram-note python init_db.py
+
+# Test database connection
+docker compose run --rm telegram-note python -c "
+from models.database import Database
+db = Database('telegram_note.db')
+print('Database OK')
+"
+
+# Test imports
+docker compose run --rm telegram-note python -c "
+from main import TelegramNoteBot
+print('Imports OK')
+"
+#+end_src
+
+* Load Testing
+
+For production, test with multiple concurrent users:
+
+#+begin_src bash
+# Check resource usage
+docker stats telegram-note-bot
+
+# Monitor logs under load
+docker logs -f telegram-note-bot
+
+# Check memory
+docker exec telegram-note-bot free -h
+#+end_src
+
+Recommended: t2.micro can handle ~50-100 concurrent users.
+
+* Quick Test Checklist
+
+- [ ] Bot responds to =/start=
+- [ ] Can create note via Web App
+- [ ] Can save note successfully
+- [ ] Note appears in =/notes= list
+- [ ] Can edit existing note
+- [ ] Can create schedule via Web App
+- [ ] Reminder is scheduled correctly
+- [ ] Test reminder fires on time
+- [ ] Direct URL access is blocked
+- [ ] Tags and markdown formatting work
+- [ ] Timezone is correct (for reminders)

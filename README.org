@@ -1,0 +1,175 @@
+#+TITLE: Telegram Note
+#+AUTHOR: Telegram Note Bot
+#+DATE: 2025
+
+* Overview
+
+A Telegram bot that enables users to save notes, schedule personal events, and receive notification reminders.
+
+* Features
+
+- *Notes Management*: Create, edit, and search notes with tags in markdown format
+- *Schedule Management*: Create and manage schedules with customizable reminders
+- *Smart Reminders*: Get notified minutes, hours, or days before scheduled events
+- *Web App Editor*: Rich markdown editor with live preview
+- *Simple Interface*: Easy-to-use slash commands for all operations
+
+* Quick Start
+
+** Prerequisites
+
+- Python 3.8+ (for local development) or Docker (for production)
+- Telegram Bot Token from [[https://t.me/botfather][@BotFather]]
+
+** Installation
+
+*** Docker Deployment (Recommended)
+
+#+begin_src bash
+# Clone repository
+git clone <repository-url>
+cd telegram-note
+
+# Configure
+cp .env.example .env
+nano .env  # Add your TELEGRAM_BOT_TOKEN and set TZ=Your/Timezone
+
+# Create data directory
+mkdir -p data
+
+# Start bot
+docker-compose build
+docker-compose up -d
+
+# Check logs
+docker-compose logs -f
+#+end_src
+
+*** Local Development
+
+#+begin_src bash
+# Clone and setup
+git clone <repository-url>
+cd telegram-note
+
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Initialize database
+python init_db.py
+
+# Configure
+cp .env.example .env
+nano .env  # Add your TELEGRAM_BOT_TOKEN
+
+# Run bot
+python src/main.py
+#+end_src
+
+* Usage
+
+** Available Commands
+
+Type =/= in Telegram to see all commands with auto-completion:
+
+- =/start= or =/help= - Show help message
+- =/notes [keyword/tag]= - List all notes (optionally filtered)
+- =/note <name>= - Open or create a note
+- =/schedules [period]= - List all schedules (optionally filtered)
+- =/schedule <name>= - Open or create a schedule
+- =/delete <name>= - Delete a note or schedule
+
+** Creating Notes
+
+1. Send: =/note my-first-note=
+2. Click *"📝 Edit Note"* button to open Web App editor
+3. Fill in:
+   - Title
+   - Tags (comma-separated)
+   - Content (Markdown supported)
+4. Click *"Save Note"*
+
+** Creating Schedules
+
+1. Send: =/schedule team-meeting=
+2. Click *"📅 Edit Schedule"* button
+3. Fill in:
+   - Title
+   - Start/End time
+   - Reminder (minutes before)
+   - Description (Markdown supported)
+4. Click *"Save Schedule"*
+
+** Searching
+
+#+begin_src
+/notes personal     # Search notes
+/schedules today    # List today's schedules
+/schedules week     # List this week's schedules
+#+end_src
+
+* Project Structure
+
+#+begin_example
+telegram-note/
+├── src/
+│   ├── models/          # Database models
+│   ├── modules/         # Business logic
+│   ├── services/        # Background services
+│   ├── utils/           # Utilities
+│   ├── config.py        # Configuration
+│   └── main.py          # Main entry point
+├── webapp/              # Web App editor files
+├── docs/                # Documentation
+├── data/                # Database storage (gitignored)
+├── init_db.py           # Database initialization
+├── check_reminders.py   # Diagnostic tool
+└── docker-compose.yml   # Docker configuration
+#+end_example
+
+* Documentation
+
+- [[file:docs/deployment.org][Deployment Guide]] - AWS EC2 and Docker deployment
+- [[file:docs/troubleshooting.org][Troubleshooting Guide]] - Common issues and solutions
+- [[file:docs/testing.org][Testing Guide]] - How to test the Web App
+- [[file:CLAUDE.md][Development Guide]] - For developers (Claude Code)
+
+* Database
+
+** Schema
+
+- *notes*: User notes with title, tags, and markdown content
+- *schedules*: User schedules with datetime and reminders
+- *reminders*: Scheduled reminders and delivery status
+
+** Management Commands
+
+#+begin_src bash
+# Open database shell
+sqlite3 telegram_note.db
+
+# View tables
+.tables
+
+# Query notes
+SELECT * FROM notes;
+
+# Exit
+.quit
+#+end_src
+
+* Technology Stack
+
+- *Bot Framework*: python-telegram-bot v21.0
+- *Database*: SQLite
+- *Scheduler*: APScheduler
+- *Web Server*: Built-in HTTP server
+- *Markdown*: markdown package
+
+* License
+
+MIT License

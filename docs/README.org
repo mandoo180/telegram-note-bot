@@ -1,0 +1,40 @@
+#+TITLE: Documentation Index
+#+AUTHOR: Telegram Note Bot
+#+DATE: 2025
+
+* Documentation
+
+Complete documentation for the Telegram Note Bot.
+
+** Quick Links
+
+- [[file:../README.org][Main README]] - Project overview and quick start
+- [[file:deployment.org][Deployment Guide]] - AWS EC2, Docker deployment, HTTPS setup
+- [[file:troubleshooting.org][Troubleshooting Guide]] - Common issues and solutions
+- [[file:testing.org][Testing Guide]] - How to test the Web App
+- [[file:PRD.org][Product Requirements]] - Feature specifications
+
+** Development
+
+For development guidance, see [[file:../CLAUDE.md][CLAUDE.md]] in the project root.
+
+** Getting Started
+
+New to the project? Start here:
+
+1. Read the [[file:../README.org][Main README]] for overview
+2. Follow the [[file:deployment.org][Deployment Guide]] to set up
+3. Use [[file:testing.org][Testing Guide]] to verify everything works
+4. Refer to [[file:troubleshooting.org][Troubleshooting]] if you encounter issues
+
+** Structure
+
+All documentation is now in [[https://orgmode.org/][Org Mode format]], except =CLAUDE.md= which remains in Markdown for compatibility.
+
+*** Why Org Mode?
+
+- Better structure with outlining
+- Easy navigation with folding
+- Links between documents
+- Native Emacs support
+- Exports to HTML, PDF, etc.

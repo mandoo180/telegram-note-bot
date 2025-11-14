@@ -1,0 +1,423 @@
+#+TITLE: Troubleshooting Guide
+#+AUTHOR: Telegram Note Bot
+#+DATE: 2025
+
+* Quick Diagnostic
+
+Run this first:
+
+#+begin_src bash
+# Check if bot is running
+docker ps | grep telegram-note
+
+# Run diagnostic script
+docker exec telegram-note-bot python check_reminders.py
+
+# View logs
+docker logs --tail 100 telegram-note-bot
+#+end_src
+
+* Common Issues
+
+** Reminders Not Firing
+
+*** Symptoms:
+- Bot is running but reminders don't send
+- No error messages in logs
+
+*** Diagnosis:
+
+#+begin_src bash
+# Check timezone
+docker exec telegram-note-bot date  # Should show LOCAL time, not UTC
+
+# Run diagnostic
+docker exec telegram-note-bot python check_reminders.py
+
+# Check pending reminders
+docker exec telegram-note-bot sqlite3 /app/data/telegram_note.db "SELECT * FROM reminders WHERE sent = FALSE"
+#+end_src
+
+*** Solution:
+
+**** A. Wrong Timezone (Most Common!)
+
+#+begin_src bash
+# Check current timezone
+docker exec telegram-note-bot cat /etc/timezone
+
+# If it shows UTC instead of your timezone:
+# 1. Edit .env
+nano .env
+# Add: TZ=Asia/Seoul  (or your timezone)
+
+# 2. Rebuild container
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
+
+# 3. Verify fix
+docker exec telegram-note-bot date
+#+end_src
+
+**** B. Bot Not Running Continuously
+
+#+begin_src bash
+# Check if container is running
+docker ps | grep telegram-note
+
+# If not running, start it
+docker-compose up -d
+
+# Check logs for crashes
+docker logs --tail 100 telegram-note-bot
+#+end_src
+
+**** C. Reminders in the Past
+
+#+begin_src bash
+# Check reminder times
+docker exec telegram-note-bot sqlite3 /app/data/telegram_note.db "
+SELECT s.name, s.start_datetime, r.reminder_time, 
+       datetime('now', 'localtime') as current_time
+FROM schedules s
+JOIN reminders r ON s.id = r.schedule_id  
+WHERE r.sent = FALSE
+"
+#+end_src
+
+If reminder_time < current_time, create a new schedule with future time.
+
+** Bot Not Responding
+
+*** Symptoms:
+- Bot doesn't respond to =/start= or commands
+
+*** Diagnosis:
+
+#+begin_src bash
+# Check container status
+docker ps | grep telegram-note
+
+# Check logs for errors
+docker logs --tail 100 telegram-note-bot
+
+# Check bot token
+docker exec telegram-note-bot env | grep TELEGRAM_BOT_TOKEN
+#+end_src
+
+*** Solutions:
+
+**** Container Not Running:
+
+#+begin_src bash
+docker-compose up -d
+docker logs -f telegram-note-bot
+#+end_src
+
+**** Wrong Bot Token:
+
+#+begin_src bash
+# Edit .env with correct token
+nano .env
+
+# Restart
+docker-compose restart
+
+# Verify token is loaded
+docker exec telegram-note-bot env | grep TELEGRAM_BOT_TOKEN
+#+end_src
+
+**** Network Issues:
+
+#+begin_src bash
+# Test connection to Telegram
+docker exec telegram-note-bot ping -c 3 api.telegram.org
+
+# Check security group allows outbound traffic (AWS EC2)
+#+end_src
+
+** Web App Not Accessible
+
+*** Symptoms:
+- Can't open note/schedule editor
+- "Access Denied" message
+- Blank screen
+
+*** Diagnosis:
+
+#+begin_src bash
+# Check web server is running
+docker exec telegram-note-bot netstat -tlnp | grep :8000
+
+# Check WEBAPP_BASE_URL
+docker exec telegram-note-bot env | grep WEBAPP
+
+# Check logs
+docker logs -f telegram-note-bot | grep -i webapp
+#+end_src
+
+*** Solutions:
+
+**** HTTPS Not Configured:
+
+Telegram Web Apps *require HTTPS*. See [[file:deployment.org::#https-setup][HTTPS Setup]].
+
+**** Wrong WEBAPP_BASE_URL:
+
+#+begin_src bash
+# Edit .env
+nano .env
+# Set: WEBAPP_BASE_URL=https://your-domain.com
+
+# Restart
+docker-compose restart
+#+end_src
+
+**** Token Validation Failed:
+
+This is normal security - tokens expire in 5 minutes. Just create a new schedule/note from the bot.
+
+** Docker Permission Denied
+
+*** Symptoms:
+
+#+begin_example
+Got permission denied while trying to connect to the Docker daemon socket
+#+end_example
+
+*** Solution:
+
+#+begin_src bash
+# Add user to docker group
+sudo usermod -aG docker $USER
+
+# Activate changes without logout
+newgrp docker
+
+# Verify
+docker ps
+
+# Or: logout and login again
+exit
+ssh -i your-key.pem ubuntu@YOUR_EC2_IP
+#+end_src
+
+** Database Issues
+
+*** Database Locked:
+
+#+begin_src bash
+# Check if multiple processes are accessing database
+docker exec telegram-note-bot lsof /app/data/telegram_note.db
+
+# Restart bot
+docker-compose restart
+#+end_src
+
+*** Corrupted Database:
+
+#+begin_src bash
+# Backup first!
+cp data/telegram_note.db data/telegram_note.db.broken
+
+# Check integrity
+docker exec telegram-note-bot sqlite3 /app/data/telegram_note.db "PRAGMA integrity_check"
+
+# If corrupted, dump and restore
+docker exec telegram-note-bot sqlite3 /app/data/telegram_note.db ".dump" > dump.sql
+docker exec -i telegram-note-bot sqlite3 /app/data/telegram_note_fixed.db < dump.sql
+
+# Replace database
+mv data/telegram_note.db data/telegram_note.db.broken
+mv data/telegram_note_fixed.db data/telegram_note.db
+docker-compose restart
+#+end_src
+
+** Out of Memory
+
+*** Symptoms:
+- Bot crashes
+- Container restarts repeatedly
+- =OOMKilled= in logs
+
+*** Solution:
+
+#+begin_src bash
+# Check memory
+free -h
+docker stats telegram-note-bot
+
+# Increase swap (temporary)
+sudo fallocate -l 1G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+
+# Add to /etc/fstab for permanent
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+
+# Or upgrade to larger EC2 instance
+#+end_src
+
+** Port Already in Use
+
+*** Symptoms:
+
+#+begin_example
+Error: bind: address already in use
+#+end_example
+
+*** Solution:
+
+#+begin_src bash
+# Find what's using port 8000
+sudo lsof -i :8000
+
+# Kill the process
+sudo kill -9 <PID>
+
+# Or change port in docker-compose.yml
+nano docker-compose.yml
+# Change: ports: - "8001:8000"
+#+end_src
+
+* Docker-Specific Issues
+
+** Container Keeps Restarting
+
+#+begin_src bash
+# Check logs for errors
+docker logs telegram-note-bot
+
+# Check resource limits
+docker stats telegram-note-bot
+
+# Check configuration
+docker inspect telegram-note-bot
+#+end_src
+
+** Volume Permission Issues
+
+#+begin_src bash
+# Fix permissions
+sudo chown -R $USER:$USER data/
+
+# Or run as root (not recommended)
+docker-compose run --user root telegram-note bash
+#+end_src
+
+** Image Build Fails
+
+#+begin_src bash
+# Clear Docker cache
+docker system prune -a
+
+# Rebuild without cache
+docker-compose build --no-cache
+
+# Check disk space
+df -h
+#+end_src
+
+* Diagnostic Tools
+
+** check_reminders.py
+
+Comprehensive reminder diagnostic:
+
+#+begin_src bash
+# From host
+docker exec telegram-note-bot python check_reminders.py
+
+# Or inside container
+docker exec -it telegram-note-bot bash
+python check_reminders.py
+#+end_src
+
+Shows:
+- Pending reminders and their status
+- Timezone configuration
+- Bot process status
+- Recommendations
+
+** Log Analysis
+
+#+begin_src bash
+# View all logs
+docker logs -f telegram-note-bot
+
+# Errors only
+docker logs telegram-note-bot | grep -i error
+
+# Reminders only
+docker logs -f telegram-note-bot | grep -i reminder
+
+# Last 100 lines
+docker logs --tail 100 telegram-note-bot
+#+end_src
+
+** Database Inspection
+
+#+begin_src bash
+# Open database
+docker exec -it telegram-note-bot sqlite3 /app/data/telegram_note.db
+
+# Useful queries:
+.tables
+SELECT * FROM reminders WHERE sent = FALSE;
+SELECT * FROM schedules WHERE reminder_minutes > 0;
+SELECT datetime('now', 'localtime') as local, datetime('now') as utc;
+.quit
+#+end_src
+
+* Getting Help
+
+If issues persist:
+
+1. *Collect diagnostic info:*
+
+#+begin_src bash
+docker exec telegram-note-bot python check_reminders.py > diagnostic.txt
+docker logs --tail 200 telegram-note-bot >> diagnostic.txt
+docker exec telegram-note-bot date >> diagnostic.txt
+docker exec telegram-note-bot cat /etc/timezone >> diagnostic.txt
+#+end_src
+
+2. *Check:*
+   - Bot logs
+   - Timezone is set correctly
+   - Database exists and is accessible
+   - Network connectivity
+   - Disk space and memory
+
+3. *Common fixes:*
+   - Restart: =docker-compose restart=
+   - Rebuild: =docker-compose build --no-cache && docker-compose up -d=
+   - Check timezone: =docker exec telegram-note-bot date=
+
+* Quick Reference
+
+#+begin_src bash
+# Restart bot
+docker-compose restart
+
+# View logs
+docker logs -f telegram-note-bot
+
+# Check status
+docker ps | grep telegram-note
+docker exec telegram-note-bot python check_reminders.py
+
+# Access database
+docker exec -it telegram-note-bot sqlite3 /app/data/telegram_note.db
+
+# Check timezone
+docker exec telegram-note-bot date
+
+# Backup database
+cp data/telegram_note.db data/backup-$(date +%Y%m%d).db
+
+# Clean restart
+docker-compose down && docker-compose build --no-cache && docker-compose up -d
+#+end_src
