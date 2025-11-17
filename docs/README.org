@@ -12,7 +12,7 @@ Complete documentation for the Telegram Note Bot.
 - [[file:deployment.org][Deployment Guide]] - AWS EC2, Docker deployment, HTTPS setup
 - [[file:troubleshooting.org][Troubleshooting Guide]] - Common issues and solutions
 - [[file:testing.org][Testing Guide]] - How to test the Web App
-- [[file:PRD.org][Product Requirements]] - Feature specifications
+- [[file:cicd.org][CI/CD Documentation]] - GitHub Actions workflows and automation
 
 ** Development
 

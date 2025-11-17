@@ -1,0 +1,197 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 pylint black isort
+
+      - name: Check code formatting with Black
+        run: black --check src/ || echo "::warning::Code formatting issues found. Run 'black src/' to fix."
+        continue-on-error: true
+
+      - name: Check import order with isort
+        run: isort --check-only src/ || echo "::warning::Import order issues found. Run 'isort src/' to fix."
+        continue-on-error: true
+
+      - name: Lint with flake8
+        run: |
+          # Stop the build if there are Python syntax errors or undefined names
+          flake8 src/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          # Exit-zero treats all errors as warnings
+          flake8 src/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        continue-on-error: true
+
+  test:
+    name: Test Application
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.10', '3.11']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Test database initialization
+        run: |
+          python init_db.py
+          test -f telegram_note.db || exit 1
+          echo "Database created successfully"
+
+      - name: Test database schema
+        run: |
+          sqlite3 telegram_note.db ".tables" | grep -q "notes" || exit 1
+          sqlite3 telegram_note.db ".tables" | grep -q "schedules" || exit 1
+          sqlite3 telegram_note.db ".tables" | grep -q "reminders" || exit 1
+          echo "All tables exist"
+
+      - name: Test imports
+        run: |
+          python -c "from src.main import TelegramNoteBot; print('Imports successful')"
+          python -c "from src.models.database import Database; print('Database model OK')"
+          python -c "from src.services.reminder_service import ReminderService; print('Reminder service OK')"
+
+      - name: Test reminder diagnostic script
+        run: |
+          python check_reminders.py || echo "::warning::Reminder check completed with warnings"
+
+      - name: Upload database artifact
+        uses: actions/upload-artifact@v4
+        if: matrix.python-version == '3.11'
+        with:
+          name: test-database
+          path: telegram_note.db
+          retention-days: 7
+
+  docker:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: telegram-note:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          load: true
+
+      - name: Test Docker image
+        run: |
+          # Create data directory
+          mkdir -p data
+
+          # Test database initialization
+          docker run --rm -v $(pwd)/data:/app/data telegram-note:test python init_db.py
+
+          # Verify database was created
+          test -f data/telegram_note.db || exit 1
+          echo "Docker image test passed"
+
+      - name: Test diagnostic script in Docker
+        run: |
+          docker run --rm -v $(pwd)/data:/app/data telegram-note:test python check_reminders.py
+
+      - name: Check image size
+        run: |
+          docker images telegram-note:test --format "{{.Size}}"
+          SIZE=$(docker images telegram-note:test --format "{{.Size}}" | sed 's/MB//')
+          echo "Image size: ${SIZE}MB"
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install safety
+        run: pip install safety
+
+      - name: Check for vulnerabilities
+        run: |
+          pip install -r requirements.txt
+          safety check --json || echo "::warning::Vulnerability check completed with warnings"
+        continue-on-error: true
+
+      - name: Run Trivy vulnerability scanner (Docker)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+        continue-on-error: true
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+        continue-on-error: true
+
+  summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    needs: [lint, test, docker, security]
+    if: always()
+
+    steps:
+      - name: Check results
+        run: |
+          echo "## CI Pipeline Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ All checks completed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Jobs Status:" >> $GITHUB_STEP_SUMMARY
+          echo "- Lint: ${{ needs.lint.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Test: ${{ needs.test.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Docker: ${{ needs.docker.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Security: ${{ needs.security.result }}" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,405 @@
+#+TITLE: CI/CD Documentation
+#+AUTHOR: Telegram Note Bot
+#+DATE: 2025
+
+* Overview
+
+Automated CI/CD pipelines using GitHub Actions for testing, building, and deploying the Telegram Note bot.
+
+* Workflows
+
+** CI Pipeline (=ci.yml=)
+
+Runs on every push and pull request to =main= and =develop= branches.
+
+*** Jobs:
+
+**** 1. Lint
+- Code formatting check with Black
+- Import order check with isort
+- Linting with flake8
+- All checks are non-blocking (warnings only)
+
+**** 2. Test
+- Tests on Python 3.9, 3.10, 3.11
+- Database initialization test
+- Schema validation
+- Import tests
+- Reminder diagnostic check
+- Uploads test database as artifact
+
+**** 3. Docker
+- Builds Docker image
+- Tests database initialization in container
+- Runs diagnostic script
+- Reports image size
+
+**** 4. Security
+- Dependency vulnerability scanning with =safety=
+- Container scanning with Trivy
+- Uploads results to GitHub Security tab
+
+**** 5. Summary
+- Generates CI pipeline summary
+- Shows status of all jobs
+
+*** Running Locally:
+
+#+begin_src bash
+# Install linting tools
+pip install flake8 pylint black isort
+
+# Format code
+black src/
+isort src/
+
+# Lint
+flake8 src/
+
+# Test
+python init_db.py
+python -c "from src.main import TelegramNoteBot"
+python check_reminders.py
+#+end_src
+
+** Docker Build & Publish (=docker-publish.yml=)
+
+Runs on:
+- Push to =main= branch
+- Version tags (=v*.*.*=)
+- Manual trigger
+
+*** Features:
+
+- Builds multi-platform images (amd64, arm64)
+- Publishes to GitHub Container Registry (ghcr.io)
+- Tags with version, branch, SHA
+- Caches layers for faster builds
+- Scans images for vulnerabilities
+- Uploads scan results to GitHub Security
+
+*** Image Tags:
+
+- =ghcr.io/OWNER/REPO:latest= - Latest main branch
+- =ghcr.io/OWNER/REPO:v1.0.0= - Specific version
+- =ghcr.io/OWNER/REPO:main-abc123= - SHA-based tag
+- =ghcr.io/OWNER/REPO:1= - Major version
+- =ghcr.io/OWNER/REPO:1.0= - Minor version
+
+*** Pull Images:
+
+#+begin_src bash
+# Pull latest
+docker pull ghcr.io/OWNER/REPO:latest
+
+# Pull specific version
+docker pull ghcr.io/OWNER/REPO:v1.0.0
+
+# Run
+docker run -d \
+  -e TELEGRAM_BOT_TOKEN=your_token \
+  -e TZ=Asia/Seoul \
+  -v $(pwd)/data:/app/data \
+  ghcr.io/OWNER/REPO:latest
+#+end_src
+
+** Scheduled Tests (=scheduled-tests.yml=)
+
+Runs daily at 2 AM UTC (11 AM KST).
+
+*** Purpose:
+- Catch dependency issues early
+- Verify database initialization
+- Test Docker builds
+- Security scans
+- Creates GitHub issue on failure
+
+*** Manual Trigger:
+
+Go to Actions → Scheduled Tests → Run workflow
+
+** Release (=release.yml=)
+
+Triggered by version tags or manual workflow dispatch.
+
+*** Creating a Release:
+
+#+begin_src bash
+# 1. Update version (if you have a version file)
+# 2. Commit changes
+git add .
+git commit -m "chore: bump version to 1.0.0"
+
+# 3. Create and push tag
+git tag -a v1.0.0 -m "Release v1.0.0"
+git push origin v1.0.0
+#+end_src
+
+*** What Happens:
+
+1. Runs all tests
+2. Builds Docker images for amd64 and arm64
+3. Pushes to GitHub Container Registry
+4. Generates changelog from git commits
+5. Creates GitHub Release with notes
+6. Attaches Docker image info
+
+*** Manual Release:
+
+Go to Actions → Release → Run workflow → Enter version
+
+** Dependabot (=dependabot.yml=)
+
+Automated dependency updates every Monday at 9 AM KST.
+
+*** Updates:
+- Python packages (=pip=)
+- Docker base images
+- GitHub Actions versions
+
+*** Features:
+- Opens PRs automatically
+- Groups related updates
+- Runs CI tests on PRs
+- Auto-assigns reviewers
+- Uses semantic commit messages
+
+*** Configuration:
+
+#+begin_src yaml
+schedule:
+  interval: "weekly"
+  day: "monday"
+  time: "09:00"
+  timezone: "Asia/Seoul"
+#+end_src
+
+* Secrets Configuration
+
+** Required Secrets:
+
+*** =GITHUB_TOKEN=
+- Automatically provided by GitHub
+- Used for publishing Docker images to GHCR
+- Used for creating releases
+
+*** Optional Secrets:
+
+**** =DOCKER_HUB_USERNAME= and =DOCKER_HUB_TOKEN=
+If you want to publish to Docker Hub instead of GHCR.
+
+**** =DEPLOY_KEY=
+For automated deployment to servers.
+
+** Setting Secrets:
+
+1. Go to Repository Settings
+2. Secrets and variables → Actions
+3. New repository secret
+4. Add name and value
+5. Save
+
+* GitHub Container Registry Setup
+
+** Enable GHCR:
+
+1. Go to package settings
+2. Make package public (optional)
+3. Link to repository
+
+** Authentication:
+
+#+begin_src bash
+# Login to GHCR
+echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+
+# Pull image
+docker pull ghcr.io/OWNER/REPO:latest
+#+end_src
+
+* Badges
+
+Add to =README.org=:
+
+#+begin_src org
+,#+HTML: [[https://github.com/OWNER/REPO/actions/workflows/ci.yml][https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg]]
+,#+HTML: [[https://github.com/OWNER/REPO/actions/workflows/docker-publish.yml][https://github.com/OWNER/REPO/actions/workflows/docker-publish.yml/badge.svg]]
+#+end_src
+
+* Monitoring Workflows
+
+** GitHub Actions Tab:
+
+- View all workflow runs
+- See logs for each job
+- Download artifacts
+- Re-run failed jobs
+
+** Email Notifications:
+
+GitHub sends emails on:
+- Workflow failures
+- First success after failures
+- Scheduled workflow failures
+
+** Check Status:
+
+#+begin_src bash
+# Using GitHub CLI
+gh run list
+gh run view <run-id>
+gh run watch <run-id>
+#+end_src
+
+* Troubleshooting
+
+** Workflow Fails on Lint
+
+#+begin_src bash
+# Fix formatting
+black src/
+isort src/
+
+# Commit
+git add .
+git commit -m "style: fix code formatting"
+git push
+#+end_src
+
+** Docker Build Fails
+
+- Check Dockerfile syntax
+- Verify all files exist
+- Check =.dockerignore=
+- Review build logs in Actions tab
+
+** Security Scan Failures
+
+- Review Trivy/safety output
+- Update vulnerable dependencies
+- Check dependabot PRs
+
+** Release Fails
+
+- Verify tag format: =v1.0.0=
+- Check previous tag exists
+- Ensure tests pass
+- Review release logs
+
+* Best Practices
+
+** 1. Branch Protection
+
+Configure in Settings → Branches → Add rule:
+
+- Require pull request reviews
+- Require status checks to pass
+- Require branches to be up to date
+- Include administrators
+
+** 2. Semantic Versioning
+
+Use semver for tags:
+- =v1.0.0= - Major release
+- =v1.1.0= - Minor release (new features)
+- =v1.1.1= - Patch release (bug fixes)
+- =v1.0.0-beta.1= - Pre-release
+
+** 3. Commit Messages
+
+Follow conventional commits:
+
+#+begin_example
+feat: add new reminder feature
+fix: resolve timezone bug
+docs: update deployment guide
+chore: bump dependencies
+ci: update GitHub Actions
+#+end_example
+
+** 4. Review Dependabot PRs
+
+- Check changelogs
+- Review breaking changes
+- Test locally if major version bump
+- Merge and deploy
+
+** 5. Monitor Security
+
+- Review Security tab regularly
+- Address vulnerabilities quickly
+- Keep dependencies updated
+
+* Integration with Development
+
+** Pre-commit Hooks (Optional):
+
+Create =.pre-commit-config.yaml=:
+
+#+begin_src yaml
+repos:
+  - repo: https://github.com/psf/black
+    rev: 23.12.1
+    hooks:
+      - id: black
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.0.0
+    hooks:
+      - id: flake8
+#+end_src
+
+Install:
+
+#+begin_src bash
+pip install pre-commit
+pre-commit install
+#+end_src
+
+** Local Testing Before Push:
+
+#+begin_src bash
+# Run what CI will run
+black --check src/
+isort --check-only src/
+flake8 src/
+python init_db.py
+python check_reminders.py
+
+# Build Docker
+docker build -t telegram-note:local .
+docker run --rm telegram-note:local python check_reminders.py
+#+end_src
+
+* Cost Considerations
+
+** GitHub Actions Minutes:
+
+- Public repos: Unlimited
+- Private repos: 2,000 minutes/month (free tier)
+- Linux runners: 1x multiplier
+- Windows runners: 2x multiplier
+- macOS runners: 10x multiplier
+
+** Storage:
+
+- Artifacts: 500 MB free
+- Package storage: 500 MB free
+- Auto-cleanup: 90 days
+
+** Optimization:
+
+- Use caching for dependencies
+- Use =continue-on-error= for non-critical jobs
+- Limit scheduled workflows
+- Clean up old artifacts
+
+* References
+
+- [[https://docs.github.com/en/actions][GitHub Actions Documentation]]
+- [[https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry][GitHub Container Registry]]
+- [[https://docs.github.com/en/code-security/dependabot][Dependabot]]
+- [[https://aquasecurity.github.io/trivy/][Trivy Security Scanner]]

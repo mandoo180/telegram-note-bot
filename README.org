@@ -2,9 +2,14 @@
 #+AUTHOR: Telegram Note Bot
 #+DATE: 2025
 
+[[https://github.com/OWNER/REPO/actions/workflows/ci.yml][file:https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg]]
+[[https://github.com/OWNER/REPO/actions/workflows/docker-publish.yml][file:https://github.com/OWNER/REPO/actions/workflows/docker-publish.yml/badge.svg]]
+
 * Overview
 
 A Telegram bot that enables users to save notes, schedule personal events, and receive notification reminders.
+
+*Automated CI/CD*: All code changes are automatically tested, linted, and built using GitHub Actions. See [[file:docs/cicd.org][CI/CD Documentation]].
 
 * Features
 
