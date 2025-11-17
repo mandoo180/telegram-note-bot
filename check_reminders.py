@@ -101,12 +101,16 @@ def check_reminders():
     print("\n4. BOT PROCESS STATUS:")
     print("-" * 60)
     import subprocess
-    result = subprocess.run(['pgrep', '-f', 'python.*src/main.py'],
-                          capture_output=True, text=True)
-    if result.stdout:
-        print(f"✅ Bot is running (PID: {result.stdout.strip()})")
-    else:
-        print("❌ Bot is NOT running!")
+    try:
+        result = subprocess.run(['pgrep', '-f', 'python.*src/main.py'],
+                              capture_output=True, text=True)
+        if result.stdout:
+            print(f"✅ Bot is running (PID: {result.stdout.strip()})")
+        else:
+            print("❌ Bot is NOT running!")
+    except FileNotFoundError:
+        print("⚠️  Cannot check bot status (pgrep not available)")
+        print("   This is normal in Docker containers or minimal environments")
 
     print("\n" + "=" * 60)
     print("RECOMMENDATIONS:")
