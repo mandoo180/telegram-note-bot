@@ -82,6 +82,7 @@ jobs:
           cd src && python -c "from main import TelegramNoteBot; print('Imports successful')" && cd ..
           cd src && python -c "from models.database import Database; print('Database model OK')" && cd ..
           cd src && python -c "from services.reminder_service import ReminderService; print('Reminder service OK')" && cd ..
+          cd src && python -c "from version import __version__; print(f'Version: {__version__}')" && cd ..
 
       - name: Test reminder diagnostic script
         run: |

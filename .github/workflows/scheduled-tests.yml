@@ -36,6 +36,7 @@ jobs:
           cd src && python -c "from main import TelegramNoteBot" && cd ..
           cd src && python -c "from models.database import Database" && cd ..
           cd src && python -c "from services.reminder_service import ReminderService" && cd ..
+          cd src && python -c "from version import __version__; print(f'Version: {__version__}')" && cd ..
           python check_reminders.py
 
       - name: Test Docker build

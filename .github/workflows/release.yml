@@ -35,6 +35,7 @@ jobs:
         run: |
           python init_db.py
           cd src && python -c "from main import TelegramNoteBot" && cd ..
+          cd src && python -c "from version import __version__; print(f'Version: {__version__}')" && cd ..
           python check_reminders.py
 
   build-docker:
