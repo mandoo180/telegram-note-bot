@@ -2,6 +2,7 @@
 """Diagnostic script to check reminder service status."""
 
 import sys
+import os
 import sqlite3
 from datetime import datetime
 
@@ -12,7 +13,16 @@ def check_reminders():
     print("=" * 60)
 
     # Check database
-    conn = sqlite3.connect('telegram_note.db')
+    db_path = os.getenv('DATABASE_PATH', 'telegram_note.db')
+    print(f"\nDatabase path: {db_path}")
+
+    # Check if database exists
+    if not os.path.exists(db_path):
+        print(f"❌ Database not found at: {db_path}")
+        print("\nPlease run 'python init_db.py' first to create the database.")
+        return
+
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
     print("\n1. DATABASE STATUS:")
