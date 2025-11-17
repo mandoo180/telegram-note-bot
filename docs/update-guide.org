@@ -1,0 +1,204 @@
+#+TITLE: Update Guide
+#+AUTHOR: Telegram Note Bot
+#+DATE: 2025
+
+* Quick Update
+
+Update your bot to the latest version in seconds.
+
+** Using Deployment Script
+
+#+begin_src bash
+# SSH to your server
+ssh your-server
+
+# Navigate to your bot directory (or any directory with .env file)
+cd /path/to/telegram-note
+
+# Update to latest version
+./deploy.sh
+#+end_src
+
+That's it! The script will:
+1. Pull the latest image from GHCR
+2. Stop the old container
+3. Start a new container
+4. Verify the deployment
+
+** Verify Update
+
+In Telegram, send =/version= to your bot to confirm the new version.
+
+* Update to Specific Version
+
+Deploy a specific version using the =IMAGE_TAG= environment variable:
+
+#+begin_src bash
+# Update to a specific release version
+IMAGE_TAG=v1.0.0 ./deploy.sh
+
+# Update to a specific commit
+IMAGE_TAG=sha-abc1234 ./deploy.sh
+
+# Update to main branch latest
+IMAGE_TAG=main ./deploy.sh
+#+end_src
+
+* Rollback to Previous Version
+
+If something goes wrong, rollback to a previous version:
+
+#+begin_src bash
+# Find available versions
+docker images | grep telegram-note
+
+# Or check GitHub Container Registry
+curl -s https://api.github.com/users/mandoo180/packages/container/telegram-note-bot/versions | jq '.[].metadata.container.tags'
+
+# Rollback to previous version
+IMAGE_TAG=v0.9.0 ./deploy.sh
+#+end_src
+
+* Manual Update (Without Script)
+
+If you prefer to update manually:
+
+#+begin_src bash
+# Pull latest image
+docker pull ghcr.io/mandoo180/telegram-note-bot:latest
+
+# Stop and remove old container
+docker stop telegram-note-bot
+docker rm telegram-note-bot
+
+# Start new container (adjust paths as needed)
+docker run -d \
+  --name telegram-note-bot \
+  --restart unless-stopped \
+  --env-file .env \
+  -e DATABASE_PATH=/app/data/telegram_note.db \
+  -v $(pwd)/data:/app/data \
+  ghcr.io/mandoo180/telegram-note-bot:latest
+
+# View logs
+docker logs -f telegram-note-bot
+#+end_src
+
+* Update Schedule Recommendations
+
+** Production Bots
+
+- *Weekly*: Check for updates every week
+- *Before updating*: Backup your database
+- *After updating*: Test core functionality
+- *Monitor*: Check logs for any errors
+
+** Development/Testing Bots
+
+- *Daily*: Update to latest automatically
+- *Use*: =IMAGE_TAG=latest ./deploy.sh=
+
+* Database Migration
+
+Most updates don't require database migration. If a version requires migration:
+
+1. The release notes will indicate this
+2. Backup your database first:
+   #+begin_src bash
+   cp data/telegram_note.db data/backup-$(date +%Y%m%d).db
+   #+end_src
+
+3. Update the bot
+4. The migration will run automatically on startup
+5. Check logs for migration status:
+   #+begin_src bash
+   docker logs telegram-note-bot | grep -i migration
+   #+end_src
+
+* Troubleshooting Updates
+
+** Update Fails
+
+#+begin_src bash
+# Check Docker logs
+docker logs telegram-note-bot
+
+# Check if image was pulled
+docker images | grep telegram-note
+
+# Try with --no-cache
+docker pull --no-cache ghcr.io/mandoo180/telegram-note-bot:latest
+#+end_src
+
+** Bot Won't Start After Update
+
+#+begin_src bash
+# Check container status
+docker ps -a | grep telegram-note
+
+# View detailed logs
+docker logs --tail 100 telegram-note-bot
+
+# Rollback to previous version
+IMAGE_TAG=previous-version ./deploy.sh
+#+end_src
+
+** Database Issues
+
+#+begin_src bash
+# Check database file
+ls -lh data/telegram_note.db
+
+# Restore from backup if needed
+cp data/backup-20250113.db data/telegram_note.db
+docker restart telegram-note-bot
+#+end_src
+
+* Staying Informed
+
+** Release Notifications
+
+Watch the GitHub repository for release notifications:
+- Go to: https://github.com/mandoo180/telegram-note-bot
+- Click *Watch* → *Custom* → *Releases*
+
+** Check for Updates
+
+#+begin_src bash
+# Check your current version
+docker exec telegram-note-bot python -c "import sys; sys.path.insert(0, '/app/src'); from version import __version__; print(__version__)"
+
+# Or via Telegram
+# Send: /version to your bot
+#+end_src
+
+** CI/CD Status
+
+Check if the latest build is successful:
+- View: https://github.com/mandoo180/telegram-note-bot/actions
+
+Green checkmarks mean the build is ready to deploy.
+
+* Best Practices
+
+1. *Always backup* before updating
+   #+begin_src bash
+   cp data/telegram_note.db data/backup-$(date +%Y%m%d).db
+   #+end_src
+
+2. *Test in development* before updating production
+
+3. *Read release notes* for breaking changes
+
+4. *Monitor logs* after updating
+   #+begin_src bash
+   ./deploy.sh --logs
+   #+end_src
+
+5. *Verify functionality* with =/version= and test commands
+
+6. *Keep old images* temporarily for quick rollback
+   #+begin_src bash
+   # Don't prune images immediately after update
+   # Wait a few days to ensure stability
+   #+end_src
