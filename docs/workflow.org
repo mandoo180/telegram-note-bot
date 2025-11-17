@@ -1,0 +1,598 @@
+#+TITLE: Complete Workflow Guide
+#+AUTHOR: Telegram Note Bot
+#+DATE: 2025
+
+* Overview
+
+This guide explains the complete workflow from writing code to running in production.
+
+* The Big Picture
+
+#+begin_example
+┌─────────────────┐
+│ 1. YOU          │ Write code on your laptop
+│    (Local Dev)  │ Test locally
+└────────┬────────┘
+         │ git push
+         ▼
+┌─────────────────┐
+│ 2. GITHUB       │ Stores your code
+│    (Code Repo)  │ Triggers CI/CD
+└────────┬────────┘
+         │ webhook trigger
+         ▼
+┌─────────────────┐
+│ 3. GITHUB       │ Automated testing
+│    ACTIONS      │ Build Docker image
+│    (CI/CD)      │ Publish to GHCR
+└────────┬────────┘
+         │ docker push
+         ▼
+┌─────────────────┐
+│ 4. GHCR         │ Stores Docker images
+│    (Registry)   │ ghcr.io/mandoo180/telegram-note-bot:latest
+└────────┬────────┘
+         │ docker pull
+         ▼
+┌─────────────────┐
+│ 5. YOUR SERVER  │ Runs the bot
+│    (Production) │ Serves users
+└─────────────────┘
+#+end_example
+
+* Detailed Workflow
+
+** Step 1: Local Development (Your Laptop)
+
+*** What You Do
+
+You write code, test it locally, and commit changes.
+
+#+begin_src bash
+# On your laptop
+cd ~/Projects/telegram-note
+
+# Make changes to code
+emacs src/main.py  # or your editor
+
+# Test locally
+python src/main.py
+
+# Commit changes
+git add .
+git commit -m "Add new feature"
+
+# Push to GitHub
+git push origin main
+#+end_src
+
+*** What Happens Locally
+
+- You edit files in =src/=, =docs/=, etc.
+- You test the bot locally (optional but recommended)
+- Git tracks your changes
+- Nothing is deployed yet - it's just on your laptop
+
+** Step 2: GitHub Repository
+
+*** What You Do
+
+Push your commits to GitHub.
+
+#+begin_src bash
+git push origin main
+#+end_src
+
+*** What Happens on GitHub
+
+1. GitHub receives your code
+2. Stores it in the repository: =github.com/mandoo180/telegram-note-bot=
+3. Immediately triggers GitHub Actions workflows
+4. You can see this at: https://github.com/mandoo180/telegram-note-bot/actions
+
+** Step 3: GitHub Actions (Automated CI/CD)
+
+This is where the magic happens - *completely automated*!
+
+*** Workflow #1: CI Pipeline (=.github/workflows/ci.yml=)
+
+Runs on every push to =main= or =develop= branches.
+
+#+begin_example
+┌──────────────────────────────────────┐
+│ GITHUB ACTIONS CI PIPELINE           │
+├──────────────────────────────────────┤
+│                                      │
+│ ┌─────────────────────────────────┐ │
+│ │ JOB 1: LINT                     │ │
+│ │ • Check code style (black)      │ │
+│ │ • Check imports (isort)         │ │
+│ │ • Run flake8 linter             │ │
+│ └─────────────────────────────────┘ │
+│              ▼                       │
+│ ┌─────────────────────────────────┐ │
+│ │ JOB 2: TEST                     │ │
+│ │ • Test on Python 3.9, 3.10, 3.11│ │
+│ │ • Initialize database           │ │
+│ │ • Test imports                  │ │
+│ │ • Test version module           │ │
+│ │ • Run check_reminders.py        │ │
+│ └─────────────────────────────────┘ │
+│              ▼                       │
+│ ┌─────────────────────────────────┐ │
+│ │ JOB 3: DOCKER                   │ │
+│ │ • Build Docker image            │ │
+│ │ • Test image (init DB, etc.)    │ │
+│ │ • Run diagnostics in container  │ │
+│ └─────────────────────────────────┘ │
+│              ▼                       │
+│ ┌─────────────────────────────────┐ │
+│ │ JOB 4: SECURITY                 │ │
+│ │ • Scan dependencies (safety)    │ │
+│ │ • Vulnerability scan (Trivy)    │ │
+│ └─────────────────────────────────┘ │
+│              ▼                       │
+│ ┌─────────────────────────────────┐ │
+│ │ JOB 5: SUMMARY                  │ │
+│ │ • Report overall status         │ │
+│ └─────────────────────────────────┘ │
+│                                      │
+└──────────────────────────────────────┘
+#+end_example
+
+If any job fails, the pipeline stops and you get notified.
+
+*** Workflow #2: Docker Build & Publish (=.github/workflows/docker-publish.yml=)
+
+Runs on every push to =main= branch (after CI passes).
+
+#+begin_example
+┌──────────────────────────────────────┐
+│ DOCKER BUILD & PUBLISH PIPELINE      │
+├──────────────────────────────────────┤
+│                                      │
+│ ┌─────────────────────────────────┐ │
+│ │ STEP 1: Checkout Code           │ │
+│ │ • Download your latest code     │ │
+│ └─────────────────────────────────┘ │
+│              ▼                       │
+│ ┌─────────────────────────────────┐ │
+│ │ STEP 2: Docker Login            │ │
+│ │ • Login to ghcr.io              │ │
+│ │ • Using GITHUB_TOKEN            │ │
+│ └─────────────────────────────────┘ │
+│              ▼                       │
+│ ┌─────────────────────────────────┐ │
+│ │ STEP 3: Build Docker Image      │ │
+│ │ • Run: docker build -t ...      │ │
+│ │ • Build for amd64 + arm64       │ │
+│ │ • Cache layers for speed        │ │
+│ └─────────────────────────────────┘ │
+│              ▼                       │
+│ ┌─────────────────────────────────┐ │
+│ │ STEP 4: Tag Image               │ │
+│ │ • latest                        │ │
+│ │ • main                          │ │
+│ │ • sha-abc1234                   │ │
+│ └─────────────────────────────────┘ │
+│              ▼                       │
+│ ┌─────────────────────────────────┐ │
+│ │ STEP 5: Push to GHCR            │ │
+│ │ • Upload to ghcr.io             │ │
+│ │ • Image now available!          │ │
+│ └─────────────────────────────────┘ │
+│              ▼                       │
+│ ┌─────────────────────────────────┐ │
+│ │ STEP 6: Security Scan           │ │
+│ │ • Scan published image          │ │
+│ │ • Check for vulnerabilities     │ │
+│ └─────────────────────────────────┘ │
+│                                      │
+└──────────────────────────────────────┘
+#+end_example
+
+After this completes, your Docker image is available at:
+- =ghcr.io/mandoo180/telegram-note-bot:latest=
+- =ghcr.io/mandoo180/telegram-note-bot:main=
+- =ghcr.io/mandoo180/telegram-note-bot:sha-abc1234=
+
+*** Other Workflows
+
+**** Scheduled Tests (=.github/workflows/scheduled-tests.yml=)
+- Runs daily at 2 AM UTC
+- Health check to ensure everything still works
+- Creates GitHub issue if tests fail
+
+**** Release (=.github/workflows/release.yml=)
+- Triggers when you create a version tag (e.g., =v1.0.0=)
+- Builds release Docker images
+- Creates GitHub Release with changelog
+- Publishes versioned images
+
+** Step 4: GitHub Container Registry (GHCR)
+
+*** What Is GHCR?
+
+GHCR (=ghcr.io=) is like Docker Hub, but integrated with GitHub.
+
+*** What Gets Stored
+
+Your built Docker images are stored here:
+
+#+begin_example
+ghcr.io/mandoo180/telegram-note-bot:latest      ← Most recent build
+ghcr.io/mandoo180/telegram-note-bot:main        ← Same as latest
+ghcr.io/mandoo180/telegram-note-bot:sha-abc1234 ← Specific commit
+ghcr.io/mandoo180/telegram-note-bot:v1.0.0      ← Release version
+#+end_example
+
+*** How to View
+
+1. Go to: https://github.com/mandoo180/telegram-note-bot
+2. Click "Packages" on the right side
+3. You'll see =telegram-note-bot= package
+4. Click it to see all available tags/versions
+
+** Step 5: Your Production Server
+
+*** What You Do
+
+On your cloud server, you pull and run the Docker image.
+
+#+begin_src bash
+# SSH to your server
+ssh your-server
+
+# Pull latest image
+docker pull ghcr.io/mandoo180/telegram-note-bot:latest
+
+# Or use the deployment script (recommended)
+./deploy.sh
+#+end_src
+
+*** What Happens on Server
+
+#+begin_example
+┌──────────────────────────────────────┐
+│ DEPLOYMENT SCRIPT (deploy.sh)        │
+├──────────────────────────────────────┤
+│                                      │
+│ ┌─────────────────────────────────┐ │
+│ │ 1. Check .env file              │ │
+│ │    • Verify TELEGRAM_BOT_TOKEN  │ │
+│ │    • Verify configuration       │ │
+│ └─────────────────────────────────┘ │
+│              ▼                       │
+│ ┌─────────────────────────────────┐ │
+│ │ 2. Pull Latest Image            │ │
+│ │    docker pull ghcr.io/...      │ │
+│ └─────────────────────────────────┘ │
+│              ▼                       │
+│ ┌─────────────────────────────────┐ │
+│ │ 3. Stop Old Container           │ │
+│ │    docker stop telegram-note-bot│ │
+│ │    docker rm telegram-note-bot  │ │
+│ └─────────────────────────────────┘ │
+│              ▼                       │
+│ ┌─────────────────────────────────┐ │
+│ │ 4. Initialize Database          │ │
+│ │    (if doesn't exist)           │ │
+│ │    docker run ... init_db.py    │ │
+│ └─────────────────────────────────┘ │
+│              ▼                       │
+│ ┌─────────────────────────────────┐ │
+│ │ 5. Start New Container          │ │
+│ │    docker run -d \              │ │
+│ │      --name telegram-note-bot \ │ │
+│ │      --restart unless-stopped \ │ │
+│ │      --env-file .env \          │ │
+│ │      -v $(pwd)/data:/app/data \ │ │
+│ │      ghcr.io/.../latest         │ │
+│ └─────────────────────────────────┘ │
+│              ▼                       │
+│ ┌─────────────────────────────────┐ │
+│ │ 6. Verify Deployment            │ │
+│ │    • Check container running    │ │
+│ │    • Display version            │ │
+│ │    • Show status                │ │
+│ └─────────────────────────────────┘ │
+│                                      │
+└──────────────────────────────────────┘
+#+end_example
+
+*** The Running Container
+
+#+begin_example
+┌────────────────────────────────────────┐
+│ DOCKER CONTAINER                       │
+│ (telegram-note-bot)                    │
+├────────────────────────────────────────┤
+│                                        │
+│  ┌──────────────────────────────────┐ │
+│  │ Python Process                   │ │
+│  │ • src/main.py running            │ │
+│  │ • Connects to Telegram API       │ │
+│  │ • Handles user commands          │ │
+│  │ • Sends reminders                │ │
+│  └──────────────────────────────────┘ │
+│                                        │
+│  ┌──────────────────────────────────┐ │
+│  │ Web App Server                   │ │
+│  │ • Port 8000                      │ │
+│  │ • Serves note/schedule editors   │ │
+│  └──────────────────────────────────┘ │
+│                                        │
+│  ┌──────────────────────────────────┐ │
+│  │ Data Volume (mounted)            │ │
+│  │ /app/data/                       │ │
+│  │ └─ telegram_note.db              │ │
+│  └──────────────────────────────────┘ │
+│         ▲                              │
+│         │ persisted on host            │
+└─────────┼──────────────────────────────┘
+          │
+    ┌─────▼──────┐
+    │ Host Server│
+    │ ~/data/    │
+    │ telegram_  │
+    │ note.db    │
+    └────────────┘
+#+end_example
+
+* Complete Example Workflow
+
+Let's walk through a complete example from start to finish.
+
+** Scenario: Add a New Feature
+
+You want to add a =/stats= command to show usage statistics.
+
+** Day 1: Development
+
+#+begin_src bash
+# On your laptop
+cd ~/Projects/telegram-note
+
+# Create a new branch (optional but recommended)
+git checkout -b feature/stats-command
+
+# Edit the code
+emacs src/main.py
+# Add stats_command() method and handler
+
+# Test locally
+export TELEGRAM_BOT_TOKEN="your_token"
+python src/main.py
+# Test the /stats command in Telegram
+
+# Commit your changes
+git add src/main.py
+git commit -m "feat: add /stats command to show usage statistics"
+
+# Push to GitHub
+git push origin feature/stats-command
+#+end_src
+
+** What Happens Automatically
+
+#+begin_example
+1. GitHub receives your code
+   ↓
+2. GitHub Actions triggers CI pipeline
+   ↓
+3. Runs tests on Python 3.9, 3.10, 3.11
+   ↓
+4. Builds Docker image
+   ↓
+5. All tests pass ✅
+#+end_example
+
+** Day 2: Merge to Main
+
+#+begin_src bash
+# On GitHub website:
+# 1. Create Pull Request from feature/stats-command to main
+# 2. Review the code
+# 3. Check CI status (should be green ✅)
+# 4. Click "Merge"
+
+# Or via command line:
+git checkout main
+git merge feature/stats-command
+git push origin main
+#+end_src
+
+** What Happens Automatically (Part 2)
+
+#+begin_example
+1. GitHub Actions detects push to main
+   ↓
+2. Runs FULL CI pipeline again
+   ↓
+3. Builds Docker image
+   ↓
+4. Pushes to GHCR:
+   • ghcr.io/mandoo180/telegram-note-bot:latest
+   • ghcr.io/mandoo180/telegram-note-bot:main
+   • ghcr.io/mandoo180/telegram-note-bot:sha-abc1234
+   ↓
+5. Image is now available! 🎉
+#+end_example
+
+** Day 2: Deploy to Production
+
+#+begin_src bash
+# SSH to your server
+ssh your-cloud-server
+
+# Deploy new version
+./deploy.sh
+
+# Output:
+# [INFO] Pulling image: ghcr.io/mandoo180/telegram-note-bot:latest
+# [INFO] Image pulled successfully
+# [INFO] Stopping old container...
+# [INFO] Starting new container...
+# [INFO] Container started successfully
+# [INFO] Bot version:
+#   Version: 1.0.0
+# [INFO] ✅ Deployment successful!
+#+end_src
+
+** Day 2: Verify
+
+In Telegram:
+- Send: =/stats= to your bot
+- You should see the new statistics!
+- Send: =/version= to confirm version
+
+* Timeline Example
+
+Here's what the timeline looks like:
+
+#+begin_example
+10:00 AM - You write code on laptop
+10:30 AM - git push origin main
+10:31 AM - GitHub Actions starts CI/CD (automatic)
+10:35 AM - Tests pass ✅
+10:36 AM - Docker image builds (automatic)
+10:40 AM - Image pushed to GHCR ✅
+          New image available at ghcr.io/mandoo180/telegram-note-bot:latest
+
+11:00 AM - You SSH to server
+11:01 AM - Run: ./deploy.sh
+11:02 AM - New version is live! ✅
+
+Total time: ~1 hour (mostly automated)
+Actual work: ~30 minutes (writing code)
+Deployment time: 1-2 minutes
+#+end_example
+
+* Key Points to Understand
+
+** You Never Build Docker Images Manually
+
+- GitHub Actions builds them for you
+- You just =git push=
+- Images appear in GHCR automatically
+
+** You Never Upload to Server Manually
+
+- No =scp= or =rsync= needed
+- Just =./deploy.sh= pulls from GHCR
+- Server always gets the exact same image that was tested
+
+** Database Persists Across Deployments
+
+#+begin_example
+Container 1 (old version)     Container 2 (new version)
+      │                              │
+      └──────┐              ┌────────┘
+             │              │
+        ┌────▼──────────────▼────┐
+        │  Host: ~/data/          │
+        │  telegram_note.db       │  ← SAME DATABASE
+        │  (persisted)            │
+        └─────────────────────────┘
+#+end_example
+
+Your data is safe! Only the container (code) is replaced.
+
+** Multiple Environments
+
+You can run different versions:
+
+#+begin_example
+Development Server:
+  IMAGE_TAG=main ./deploy.sh
+
+Staging Server:
+  IMAGE_TAG=sha-abc1234 ./deploy.sh
+
+Production Server:
+  IMAGE_TAG=v1.0.0 ./deploy.sh
+#+end_example
+
+* Troubleshooting the Workflow
+
+** "My changes aren't deployed!"
+
+Check:
+1. Did you =git push=?
+   #+begin_src bash
+   git status
+   git log origin/main..HEAD  # Shows unpushed commits
+   #+end_src
+
+2. Did GitHub Actions succeed?
+   - Visit: https://github.com/mandoo180/telegram-note-bot/actions
+   - Look for green checkmarks ✅
+
+3. Did you run =./deploy.sh=?
+   - The server won't update automatically
+   - You must pull the new image
+
+** "GitHub Actions failed!"
+
+1. Click on the failed workflow
+2. Click on the failed job
+3. Read the error message
+4. Fix the code
+5. =git push= again
+
+** "Bot not working after deployment"
+
+#+begin_src bash
+# Check container status
+docker ps -a | grep telegram-note
+
+# View logs
+docker logs telegram-note-bot
+
+# Check version
+docker exec telegram-note-bot python -c "import sys; sys.path.insert(0, '/app/src'); from version import __version__; print(__version__)"
+#+end_src
+
+* Summary
+
+#+begin_example
+┌─────────────────────────────────────────────────┐
+│ COMPLETE WORKFLOW SUMMARY                       │
+├─────────────────────────────────────────────────┤
+│                                                 │
+│  YOU (Laptop)                                   │
+│    │ Write code                                 │
+│    │ git commit                                 │
+│    │ git push                                   │
+│    ▼                                            │
+│  GITHUB                                         │
+│    │ Stores code                                │
+│    │ Triggers workflows                         │
+│    ▼                                            │
+│  GITHUB ACTIONS                                 │
+│    │ Run tests                                  │
+│    │ Build Docker image                         │
+│    │ Push to GHCR                               │
+│    ▼                                            │
+│  GHCR (ghcr.io)                                 │
+│    │ Stores Docker images                       │
+│    │ Tagged: latest, main, sha-*, v*            │
+│    ▼                                            │
+│  YOUR SERVER                                    │
+│    │ ./deploy.sh                                │
+│    │ docker pull ghcr.io/.../latest             │
+│    │ docker run ...                             │
+│    ▼                                            │
+│  TELEGRAM USERS                                 │
+│    │ Use your bot!                              │
+│    └─────────────────────────────────────────  │
+│                                                 │
+└─────────────────────────────────────────────────┘
+#+end_example
+
+*The beauty of this workflow:*
+- You just write code and =git push=
+- Everything else is automatic
+- Consistent, tested deployments every time
+- Easy rollback if something breaks
+- Zero-downtime updates possible
