@@ -21,6 +21,7 @@ from modules.note_module import NoteModule
 from modules.schedule_module import ScheduleModule
 from services.reminder_service import ReminderService
 from webapp_server import WebAppServer
+from version import __version__
 from utils.pagination import (
     PaginationHelper,
     format_note_for_list,
@@ -91,6 +92,7 @@ class TelegramNoteBot:
             BotCommand("schedules", "List all schedules (optionally filter by period)"),
             BotCommand("schedule", "Open or create a schedule"),
             BotCommand("delete", "Delete a note or schedule by name"),
+            BotCommand("version", "Show bot version information"),
         ]
         await application.bot.set_my_commands(commands)
         logger.info("Bot commands registered for auto-completion")
@@ -111,6 +113,15 @@ class TelegramNoteBot:
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /help command."""
         await self.start(update, context)
+
+    async def version_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /version command."""
+        await update.message.reply_text(
+            f"🤖 <b>Telegram Note Bot</b>\n\n"
+            f"Version: <code>{__version__}</code>\n\n"
+            f"A personal note-taking and scheduling bot with reminder notifications.",
+            parse_mode='HTML'
+        )
 
     async def notes_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /notes command with pagination."""
@@ -785,6 +796,7 @@ class TelegramNoteBot:
         # Add handlers
         application.add_handler(CommandHandler("start", self.start))
         application.add_handler(CommandHandler("help", self.help_command))
+        application.add_handler(CommandHandler("version", self.version_command))
         application.add_handler(CommandHandler("notes", self.notes_command))
         application.add_handler(CommandHandler("note", self.note_command))
         application.add_handler(CommandHandler("schedules", self.schedules_command))
