@@ -4,12 +4,20 @@ set -e
 # Telegram Note Bot Deployment Script
 # Pulls latest image from GitHub Container Registry and deploys
 
-# Configuration
+# Configuration (can be overridden with environment variables)
 GITHUB_USER="${GITHUB_USER:-mandoo180}"
 REPO_NAME="${REPO_NAME:-telegram-note-bot}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 CONTAINER_NAME="telegram-note-bot"
+
+# Data directory: defaults to ./data, but can be customized
+# Examples:
+#   DATA_DIR=~/data/telegram-note-bot ./deploy.sh
+#   DATA_DIR=/opt/telegram-note/data ./deploy.sh
 DATA_DIR="${DATA_DIR:-$(pwd)/data}"
+
+# Expand ~ to home directory if present
+DATA_DIR="${DATA_DIR/#\~/$HOME}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -43,6 +51,19 @@ check_env() {
     if ! grep -q "TELEGRAM_BOT_TOKEN" .env || grep -q "TELEGRAM_BOT_TOKEN=your_token_here" .env; then
         log_error "TELEGRAM_BOT_TOKEN not configured in .env"
         exit 1
+    fi
+
+    # If DATA_DIR is set in .env and not already set via environment variable, use it
+    if [ -z "${DATA_DIR_FROM_ENV:-}" ]; then
+        if grep -q "^DATA_DIR=" .env; then
+            ENV_DATA_DIR=$(grep "^DATA_DIR=" .env | cut -d '=' -f2- | tr -d '"' | tr -d "'")
+            # Expand ~ to home directory
+            ENV_DATA_DIR="${ENV_DATA_DIR/#\~/$HOME}"
+            if [ -n "$ENV_DATA_DIR" ]; then
+                DATA_DIR="$ENV_DATA_DIR"
+                log_info "Using DATA_DIR from .env: ${DATA_DIR}"
+            fi
+        fi
     fi
 
     log_info "Environment configuration OK"
@@ -140,6 +161,22 @@ show_logs() {
     docker logs -f --tail 50 "${CONTAINER_NAME}"
 }
 
+show_config() {
+    log_info "Current Configuration:"
+    echo "  Script directory: $(pwd)"
+    echo "  Data directory:   ${DATA_DIR}"
+    echo "  Database path:    ${DATA_DIR}/telegram_note.db"
+    echo "  .env file:        $(pwd)/.env"
+    echo ""
+
+    if [ -f .env ]; then
+        echo "  .env contents:"
+        grep -v "TELEGRAM_BOT_TOKEN" .env | sed 's/^/    /' || true
+        echo "    TELEGRAM_BOT_TOKEN=***hidden***"
+    fi
+    echo ""
+}
+
 # Main deployment flow
 main() {
     echo "================================================"
@@ -178,6 +215,7 @@ case "${1:-}" in
         echo "  --help, -h          Show this help message"
         echo "  --logs              Show logs only"
         echo "  --status            Show container status only"
+        echo "  --config            Show current configuration"
         echo ""
         echo "Environment variables:"
         echo "  GITHUB_USER         GitHub username (default: mandoo180)"
@@ -186,9 +224,20 @@ case "${1:-}" in
         echo "  DATA_DIR           Data directory path (default: ./data)"
         echo ""
         echo "Examples:"
-        echo "  $0                                    # Deploy latest version"
-        echo "  IMAGE_TAG=sha-abc123 $0               # Deploy specific version"
-        echo "  $0 --logs                             # View logs"
+        echo "  $0                                         # Deploy with default ./data"
+        echo "  DATA_DIR=~/data/telegram-note-bot $0       # Deploy with custom data dir"
+        echo "  IMAGE_TAG=sha-abc123 $0                    # Deploy specific version"
+        echo "  $0 --logs                                  # View logs"
+        echo "  $0 --config                                # Show configuration"
+        echo ""
+        echo "Recommended Setup:"
+        echo "  mkdir -p ~/scripts/telegram-note-bot"
+        echo "  mkdir -p ~/data/telegram-note-bot"
+        echo "  cd ~/scripts/telegram-note-bot"
+        echo "  curl -o deploy.sh https://raw.githubusercontent.com/mandoo180/telegram-note-bot/main/deploy.sh"
+        echo "  chmod +x deploy.sh"
+        echo "  # Create .env file here with DATA_DIR=/home/user/data/telegram-note-bot"
+        echo "  ./deploy.sh"
         ;;
     --logs)
         docker logs -f "${CONTAINER_NAME}"
@@ -197,6 +246,9 @@ case "${1:-}" in
         docker ps --filter "name=${CONTAINER_NAME}"
         echo ""
         docker exec "${CONTAINER_NAME}" python -c "import sys; sys.path.insert(0, '/app/src'); from version import __version__; print(f'Version: {__version__}')" 2>/dev/null || echo "Could not retrieve version"
+        ;;
+    --config)
+        show_config
         ;;
     *)
         main

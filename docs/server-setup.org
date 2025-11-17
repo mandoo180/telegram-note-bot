@@ -1,0 +1,480 @@
+#+TITLE: Server Setup Guide
+#+AUTHOR: Telegram Note Bot
+#+DATE: 2025
+
+* Recommended Directory Structure
+
+This guide shows how to organize your files on the server for clean separation of code and data.
+
+** Directory Layout
+
+#+begin_example
+~/
+├── scripts/
+│   └── telegram-note-bot/        ← Scripts and configuration
+│       ├── deploy.sh              ← Deployment script
+│       └── .env                   ← Environment configuration
+│
+└── data/
+    └── telegram-note-bot/         ← Persistent data
+        └── telegram_note.db       ← Database (created automatically)
+#+end_example
+
+** Why This Structure?
+
+- *Scripts*: Easy to find and update deployment scripts
+- *Data*: Separate location for database (easy to backup)
+- *Clean*: No clutter in home directory
+- *Flexible*: Data can be on different disk/partition
+
+* Step-by-Step Setup
+
+** 1. Create Directories
+
+#+begin_src bash
+# On your server
+mkdir -p ~/scripts/telegram-note-bot
+mkdir -p ~/data/telegram-note-bot
+#+end_src
+
+** 2. Download Deployment Script
+
+#+begin_src bash
+cd ~/scripts/telegram-note-bot
+
+# Download the latest deploy.sh
+curl -o deploy.sh https://raw.githubusercontent.com/mandoo180/telegram-note-bot/main/deploy.sh
+chmod +x deploy.sh
+#+end_src
+
+** 3. Create .env Configuration
+
+#+begin_src bash
+cd ~/scripts/telegram-note-bot
+
+# Create .env file
+cat > .env <<'EOF'
+# Telegram Bot Configuration
+TELEGRAM_BOT_TOKEN=your_bot_token_here
+
+# Database Configuration (inside container)
+DATABASE_PATH=/app/data/telegram_note.db
+
+# Data Directory (on host machine)
+# IMPORTANT: Use absolute path, not relative
+DATA_DIR=~/data/telegram-note-bot
+
+# Web App Configuration
+WEBAPP_BASE_URL=http://YOUR_SERVER_IP:8000
+WEBAPP_PORT=8000
+
+# Timezone Configuration
+TZ=Asia/Seoul
+EOF
+
+# Edit with your actual values
+nano .env
+#+end_src
+
+** 4. Configure .env File
+
+Edit the .env file and set:
+
+1. *TELEGRAM_BOT_TOKEN*: Get from [[https://t.me/botfather][@BotFather]]
+   - Start chat with @BotFather in Telegram
+   - Send: =/newbot=
+   - Follow instructions
+   - Copy the token
+
+2. *DATA_DIR*: Set to your data directory
+   - Use absolute path: =/home/username/data/telegram-note-bot=
+   - Or use ~: =~/data/telegram-note-bot=
+
+3. *WEBAPP_BASE_URL*: Your server's public URL
+   - Use your server IP: =http://1.2.3.4:8000=
+   - Or domain: =https://bot.yourdomain.com=
+
+4. *TZ*: Your timezone
+   - Korea: =Asia/Seoul=
+   - US East: =America/New_York=
+   - [[https://en.wikipedia.org/wiki/List_of_tz_database_time_zones][Full list]]
+
+** 5. Deploy the Bot
+
+#+begin_src bash
+cd ~/scripts/telegram-note-bot
+
+# Check your configuration
+./deploy.sh --config
+
+# Deploy!
+./deploy.sh
+#+end_src
+
+** 6. Verify Setup
+
+#+begin_src bash
+# Check directory structure
+tree -L 3 ~/scripts ~/data
+# Or without tree:
+ls -la ~/scripts/telegram-note-bot/
+ls -la ~/data/telegram-note-bot/
+
+# Check container
+docker ps | grep telegram-note
+
+# Check logs
+./deploy.sh --logs
+#+end_src
+
+In Telegram, send =/version= to your bot.
+
+* Alternative Setups
+
+** Option 1: Everything in One Directory
+
+If you prefer everything in one place:
+
+#+begin_src bash
+mkdir -p ~/telegram-note-bot
+
+cd ~/telegram-note-bot
+curl -o deploy.sh https://raw.githubusercontent.com/mandoo180/telegram-note-bot/main/deploy.sh
+chmod +x deploy.sh
+
+cat > .env <<'EOF'
+TELEGRAM_BOT_TOKEN=your_token_here
+DATABASE_PATH=/app/data/telegram_note.db
+# DATA_DIR not set - will use ./data by default
+WEBAPP_BASE_URL=http://YOUR_IP:8000
+WEBAPP_PORT=8000
+TZ=Asia/Seoul
+EOF
+
+./deploy.sh
+#+end_src
+
+Result:
+#+begin_example
+~/telegram-note-bot/
+├── deploy.sh
+├── .env
+└── data/
+    └── telegram_note.db
+#+end_example
+
+** Option 2: System-Wide Installation
+
+For system-wide installation (requires root):
+
+#+begin_src bash
+sudo mkdir -p /opt/telegram-note/scripts
+sudo mkdir -p /opt/telegram-note/data
+
+cd /opt/telegram-note/scripts
+sudo curl -o deploy.sh https://raw.githubusercontent.com/mandoo180/telegram-note-bot/main/deploy.sh
+sudo chmod +x deploy.sh
+
+sudo tee /opt/telegram-note/scripts/.env > /dev/null <<'EOF'
+TELEGRAM_BOT_TOKEN=your_token_here
+DATABASE_PATH=/app/data/telegram_note.db
+DATA_DIR=/opt/telegram-note/data
+WEBAPP_BASE_URL=http://YOUR_IP:8000
+WEBAPP_PORT=8000
+TZ=Asia/Seoul
+EOF
+
+sudo ./deploy.sh
+#+end_src
+
+Result:
+#+begin_example
+/opt/telegram-note/
+├── scripts/
+│   ├── deploy.sh
+│   └── .env
+└── data/
+    └── telegram_note.db
+#+end_example
+
+* Understanding DATA_DIR
+
+** How DATA_DIR Works
+
+The =DATA_DIR= variable tells the deployment script where to store your database on the host machine.
+
+#+begin_example
+┌─────────────────────────────────────────────┐
+│ HOST MACHINE                                │
+│                                             │
+│  ~/scripts/telegram-note-bot/               │
+│  ├── deploy.sh                              │
+│  └── .env  ← DATA_DIR=~/data/telegram-note-bot
+│                                             │
+│  ~/data/telegram-note-bot/                  │
+│  └── telegram_note.db  ← Actual database    │
+│                            │                │
+│         ┌──────────────────┘                │
+│         │ Volume mount                      │
+│  ┌──────▼──────────────────────────────┐   │
+│  │ DOCKER CONTAINER                    │   │
+│  │                                     │   │
+│  │  /app/data/telegram_note.db         │   │
+│  │  (inside container)                 │   │
+│  │                                     │   │
+│  └─────────────────────────────────────┘   │
+└─────────────────────────────────────────────┘
+#+end_example
+
+** Three Ways to Set DATA_DIR
+
+1. *In .env file* (Recommended)
+   #+begin_src bash
+   # In ~/scripts/telegram-note-bot/.env
+   DATA_DIR=~/data/telegram-note-bot
+   #+end_src
+
+2. *As environment variable* (One-time use)
+   #+begin_src bash
+   DATA_DIR=~/data/telegram-note-bot ./deploy.sh
+   #+end_src
+
+3. *Default* (If not set anywhere)
+   #+begin_src bash
+   # Uses ./data relative to where deploy.sh is run
+   # If run from ~/scripts/telegram-note-bot/
+   # Creates ~/scripts/telegram-note-bot/data/
+   #+end_src
+
+** Path Formats
+
+DATA_DIR accepts multiple formats:
+
+#+begin_example
+# Absolute path
+DATA_DIR=/home/ubuntu/data/telegram-note-bot
+
+# Tilde expansion (recommended)
+DATA_DIR=~/data/telegram-note-bot
+
+# Relative path (not recommended)
+DATA_DIR=../data/telegram-note-bot
+
+# Current directory
+DATA_DIR=./data
+#+end_example
+
+* Managing Your Setup
+
+** Updating the Bot
+
+#+begin_src bash
+cd ~/scripts/telegram-note-bot
+./deploy.sh
+#+end_src
+
+That's it! The script will:
+1. Pull the latest image
+2. Stop the old container
+3. Start a new container
+4. Keep your database unchanged at =~/data/telegram-note-bot/=
+
+** Backing Up Data
+
+#+begin_src bash
+# Backup database
+cp ~/data/telegram-note-bot/telegram_note.db \
+   ~/data/telegram-note-bot/backup-$(date +%Y%m%d).db
+
+# Or backup entire data directory
+tar -czf telegram-note-backup-$(date +%Y%m%d).tar.gz \
+  -C ~/data telegram-note-bot/
+
+# Copy to another server (optional)
+scp ~/data/telegram-note-bot/backup-*.db user@backup-server:~/backups/
+#+end_src
+
+** Viewing Logs
+
+#+begin_src bash
+cd ~/scripts/telegram-note-bot
+
+# Stream logs
+./deploy.sh --logs
+
+# Or directly with docker
+docker logs -f telegram-note-bot
+#+end_src
+
+** Checking Status
+
+#+begin_src bash
+cd ~/scripts/telegram-note-bot
+
+# Show configuration
+./deploy.sh --config
+
+# Show container status
+./deploy.sh --status
+
+# Show running containers
+docker ps
+#+end_src
+
+** Restarting the Bot
+
+#+begin_src bash
+# Quick restart (same version)
+docker restart telegram-note-bot
+
+# Or redeploy (pulls latest version)
+cd ~/scripts/telegram-note-bot
+./deploy.sh
+#+end_src
+
+* Troubleshooting
+
+** "Data directory not found"
+
+#+begin_src bash
+# Check if directory exists
+ls -la ~/data/telegram-note-bot/
+
+# Create if missing
+mkdir -p ~/data/telegram-note-bot
+
+# Check permissions
+ls -ld ~/data/telegram-note-bot/
+# Should show: drwxr-xr-x
+#+end_src
+
+** "Database in wrong location"
+
+#+begin_src bash
+# Show current configuration
+cd ~/scripts/telegram-note-bot
+./deploy.sh --config
+
+# Check .env file
+cat .env | grep DATA_DIR
+
+# Find where database actually is
+find ~ -name "telegram_note.db" -type f
+#+end_src
+
+** "Permission denied"
+
+#+begin_src bash
+# Fix directory permissions
+chmod 755 ~/data/telegram-note-bot/
+chmod 644 ~/data/telegram-note-bot/telegram_note.db
+
+# Or make user owner
+sudo chown -R $USER:$USER ~/data/telegram-note-bot/
+#+end_src
+
+** Moving Data to New Location
+
+#+begin_src bash
+# Stop container
+docker stop telegram-note-bot
+docker rm telegram-note-bot
+
+# Move data
+mv ~/scripts/telegram-note-bot/data ~/data/telegram-note-bot
+
+# Update .env
+cd ~/scripts/telegram-note-bot
+nano .env
+# Set: DATA_DIR=~/data/telegram-note-bot
+
+# Redeploy
+./deploy.sh
+#+end_src
+
+* Example: Complete Fresh Setup
+
+Here's a complete example from scratch:
+
+#+begin_src bash
+# SSH to server
+ssh ubuntu@your-server-ip
+
+# 1. Install Docker (if not installed)
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+sudo usermod -aG docker $USER
+# Log out and back in
+
+# 2. Create directories
+mkdir -p ~/scripts/telegram-note-bot
+mkdir -p ~/data/telegram-note-bot
+
+# 3. Download deployment script
+cd ~/scripts/telegram-note-bot
+curl -o deploy.sh https://raw.githubusercontent.com/mandoo180/telegram-note-bot/main/deploy.sh
+chmod +x deploy.sh
+
+# 4. Create .env file
+cat > .env <<'EOF'
+TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+DATABASE_PATH=/app/data/telegram_note.db
+DATA_DIR=~/data/telegram-note-bot
+WEBAPP_BASE_URL=http://1.2.3.4:8000
+WEBAPP_PORT=8000
+TZ=Asia/Seoul
+EOF
+
+# Replace with your actual values:
+nano .env
+
+# 5. Check configuration
+./deploy.sh --config
+
+# 6. Deploy!
+./deploy.sh
+
+# 7. Verify
+docker ps
+ls -la ~/data/telegram-note-bot/
+
+# 8. Test in Telegram
+# Send /version to your bot
+#+end_src
+
+* Quick Reference
+
+** Directory Structure
+#+begin_example
+~/scripts/telegram-note-bot/   ← Scripts and config
+  ├── deploy.sh                ← Deployment script
+  └── .env                     ← Configuration
+
+~/data/telegram-note-bot/      ← Data
+  └── telegram_note.db         ← Database
+#+end_example
+
+** Essential Commands
+#+begin_src bash
+# Deploy/Update
+cd ~/scripts/telegram-note-bot && ./deploy.sh
+
+# View logs
+cd ~/scripts/telegram-note-bot && ./deploy.sh --logs
+
+# Check status
+cd ~/scripts/telegram-note-bot && ./deploy.sh --status
+
+# Backup
+cp ~/data/telegram-note-bot/telegram_note.db \
+   ~/data/telegram-note-bot/backup-$(date +%Y%m%d).db
+#+end_src
+
+** Key Configuration (.env)
+#+begin_example
+TELEGRAM_BOT_TOKEN=your_token
+DATA_DIR=~/data/telegram-note-bot
+DATABASE_PATH=/app/data/telegram_note.db
+WEBAPP_BASE_URL=http://YOUR_IP:8000
+TZ=Asia/Seoul
+#+end_example
