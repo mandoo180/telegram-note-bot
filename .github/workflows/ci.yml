@@ -79,9 +79,9 @@ jobs:
 
       - name: Test imports
         run: |
-          python -c "from src.main import TelegramNoteBot; print('Imports successful')"
-          python -c "from src.models.database import Database; print('Database model OK')"
-          python -c "from src.services.reminder_service import ReminderService; print('Reminder service OK')"
+          cd src && python -c "from main import TelegramNoteBot; print('Imports successful')" && cd ..
+          cd src && python -c "from models.database import Database; print('Database model OK')" && cd ..
+          cd src && python -c "from services.reminder_service import ReminderService; print('Reminder service OK')" && cd ..
 
       - name: Test reminder diagnostic script
         run: |

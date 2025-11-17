@@ -34,7 +34,7 @@ jobs:
       - name: Run tests
         run: |
           python init_db.py
-          python -c "from src.main import TelegramNoteBot"
+          cd src && python -c "from main import TelegramNoteBot" && cd ..
           python check_reminders.py
 
   build-docker:

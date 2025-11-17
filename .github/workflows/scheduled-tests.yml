@@ -33,9 +33,9 @@ jobs:
 
       - name: Test imports and modules
         run: |
-          python -c "from src.main import TelegramNoteBot"
-          python -c "from src.models.database import Database"
-          python -c "from src.services.reminder_service import ReminderService"
+          cd src && python -c "from main import TelegramNoteBot" && cd ..
+          cd src && python -c "from models.database import Database" && cd ..
+          cd src && python -c "from services.reminder_service import ReminderService" && cd ..
           python check_reminders.py
 
       - name: Test Docker build
