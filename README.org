@@ -23,12 +23,45 @@ A Telegram bot that enables users to save notes, schedule personal events, and r
 
 ** Prerequisites
 
-- Python 3.8+ (for local development) or Docker (for production)
+- Docker (for production) or Python 3.8+ (for local development)
 - Telegram Bot Token from [[https://t.me/botfather][@BotFather]]
 
 ** Installation
 
-*** Docker Deployment (Recommended)
+*** Quick Deploy with Pre-built Image (Recommended)
+
+Deploy in seconds using pre-built images from GitHub Container Registry:
+
+#+begin_src bash
+# Download deployment script
+curl -o deploy.sh https://raw.githubusercontent.com/mandoo180/telegram-note-bot/main/deploy.sh
+chmod +x deploy.sh
+
+# Configure
+cat > .env <<EOF
+TELEGRAM_BOT_TOKEN=your_token_here
+DATABASE_PATH=/app/data/telegram_note.db
+WEBAPP_BASE_URL=http://YOUR_IP:8000
+WEBAPP_PORT=8000
+TZ=Asia/Seoul
+EOF
+
+# Edit with your settings
+nano .env
+
+# Deploy!
+./deploy.sh
+#+end_src
+
+The script automatically:
+- Pulls latest image from =ghcr.io/mandoo180/telegram-note-bot=
+- Initializes database
+- Starts the bot
+- Verifies deployment
+
+*** Docker Deployment (From Source)
+
+Build from source for customization:
 
 #+begin_src bash
 # Clone repository
@@ -82,6 +115,7 @@ python src/main.py
 Type =/= in Telegram to see all commands with auto-completion:
 
 - =/start= or =/help= - Show help message
+- =/version= - Show bot version (useful to verify deployment)
 - =/notes [keyword/tag]= - List all notes (optionally filtered)
 - =/note <name>= - Open or create a note
 - =/schedules [period]= - List all schedules (optionally filtered)

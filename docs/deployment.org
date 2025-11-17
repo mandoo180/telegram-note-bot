@@ -3,15 +3,174 @@
 #+DATE: 2025
 
 * Table of Contents :TOC:
+- [[#quick-start-using-ghcr][Quick Start (Using GHCR)]]
+- [[#automated-deployment][Automated Deployment]]
 - [[#quick-deploy-aws-ec2][Quick Deploy (AWS EC2)]]
-- [[#docker-deployment][Docker Deployment]]
+- [[#docker-deployment-from-source][Docker Deployment (From Source)]]
 - [[#production-deployment][Production Deployment]]
 - [[#https-setup][HTTPS Setup]]
 - [[#management][Management]]
 
+* Quick Start (Using GHCR)
+
+*Recommended Method* - Deploy pre-built images from GitHub Container Registry.
+
+** Prerequisites
+
+- Docker installed
+- Telegram Bot Token from [[https://t.me/botfather][@BotFather]]
+- =.env= file configured
+
+** One-Command Deploy
+
+#+begin_src bash
+# Download deployment script
+curl -o deploy.sh https://raw.githubusercontent.com/mandoo180/telegram-note-bot/main/deploy.sh
+chmod +x deploy.sh
+
+# Configure environment
+cat > .env <<EOF
+TELEGRAM_BOT_TOKEN=your_token_here
+DATABASE_PATH=/app/data/telegram_note.db
+WEBAPP_BASE_URL=http://YOUR_IP:8000
+WEBAPP_PORT=8000
+TZ=Asia/Seoul
+EOF
+
+# Deploy!
+./deploy.sh
+#+end_src
+
+The script will:
+1. ✅ Pull latest image from =ghcr.io/mandoo180/telegram-note-bot=
+2. ✅ Stop old container (if exists)
+3. ✅ Initialize database (if needed)
+4. ✅ Start new container
+5. ✅ Verify deployment
+
+** Manual Deploy (Using Docker)
+
+#+begin_src bash
+# Create data directory
+mkdir -p data
+
+# Configure environment
+cp .env.example .env
+nano .env  # Edit with your settings
+
+# Pull image
+docker pull ghcr.io/mandoo180/telegram-note-bot:latest
+
+# Initialize database (first time only)
+docker run --rm \
+  -v $(pwd)/data:/app/data \
+  -e DATABASE_PATH=/app/data/telegram_note.db \
+  ghcr.io/mandoo180/telegram-note-bot:latest \
+  python init_db.py
+
+# Run bot
+docker run -d \
+  --name telegram-note-bot \
+  --restart unless-stopped \
+  --env-file .env \
+  -e DATABASE_PATH=/app/data/telegram_note.db \
+  -v $(pwd)/data:/app/data \
+  ghcr.io/mandoo180/telegram-note-bot:latest
+
+# View logs
+docker logs -f telegram-note-bot
+#+end_src
+
+** Verify Deployment
+
+In Telegram, send =/version= to your bot. You should see:
+
+#+begin_example
+🤖 Telegram Note Bot
+
+Version: 1.0.0
+
+A personal note-taking and scheduling bot with reminder notifications.
+#+end_example
+
+* Automated Deployment
+
+Use the =deploy.sh= script for automated deployments.
+
+** Basic Usage
+
+#+begin_src bash
+# Deploy latest version
+./deploy.sh
+
+# Deploy specific version
+IMAGE_TAG=sha-abc123 ./deploy.sh
+
+# View logs
+./deploy.sh --logs
+
+# Check status
+./deploy.sh --status
+#+end_src
+
+** Environment Variables
+
+Customize deployment with environment variables:
+
+#+begin_src bash
+# Deploy from different repository
+GITHUB_USER=yourname REPO_NAME=your-bot ./deploy.sh
+
+# Use different tag
+IMAGE_TAG=v1.0.0 ./deploy.sh
+
+# Custom data directory
+DATA_DIR=/opt/telegram-note/data ./deploy.sh
+#+end_src
+
+** Updating the Bot
+
+To update to the latest version:
+
+#+begin_src bash
+# Simply re-run the deployment script
+./deploy.sh
+#+end_src
+
+The script will:
+- Pull the latest image
+- Stop the old container
+- Start a new container with the same data volume
+- Preserve your database and settings
+
+** Authentication for Private Repositories
+
+If your repository is private:
+
+#+begin_src bash
+# Create GitHub Personal Access Token with 'read:packages' scope
+# Then authenticate:
+echo $GITHUB_TOKEN | docker login ghcr.io -u mandoo180 --password-stdin
+
+# Now deploy
+./deploy.sh
+#+end_src
+
+** Available Image Tags
+
+- =latest= - Latest build from main branch
+- =main= - Same as latest
+- =sha-<commit>= - Specific commit (e.g., =sha-abc1234=)
+- =v*.*.*= - Release versions (e.g., =v1.0.0=)
+
+#+begin_src bash
+# View available tags
+curl -s https://api.github.com/users/mandoo180/packages/container/telegram-note-bot/versions | jq '.[].metadata.container.tags'
+#+end_src
+
 * Quick Deploy (AWS EC2)
 
-Deploy to AWS EC2 in under 15 minutes.
+Deploy to AWS EC2 in under 15 minutes using pre-built images from GHCR.
 
 ** Prerequisites
 
@@ -49,9 +208,6 @@ curl -fsSL https://get.docker.com -o get-docker.sh
 sudo sh get-docker.sh
 sudo usermod -aG docker $USER
 
-# Install git
-sudo apt-get install -y git
-
 # Log out and back in for group changes
 exit
 ssh -i your-key.pem ubuntu@YOUR_EC2_IP
@@ -60,52 +216,49 @@ ssh -i your-key.pem ubuntu@YOUR_EC2_IP
 ** Step 3: Deploy Bot
 
 #+begin_src bash
-# Clone repository
-git clone <your-repo-url> telegram-note
-cd telegram-note
+# Download deployment script
+curl -o deploy.sh https://raw.githubusercontent.com/mandoo180/telegram-note-bot/main/deploy.sh
+chmod +x deploy.sh
 
-# Configure
-cp .env.example .env
-nano .env  # Edit with your settings
-#+end_src
-
-In =.env=, set:
-
-#+begin_example
+# Configure environment
+cat > .env <<EOF
 TELEGRAM_BOT_TOKEN=your_token_here
 DATABASE_PATH=/app/data/telegram_note.db
 WEBAPP_BASE_URL=http://YOUR_EC2_IP:8000
 WEBAPP_PORT=8000
-TZ=Asia/Seoul  # YOUR TIMEZONE - CRITICAL!
-#+end_example
+TZ=Asia/Seoul
+EOF
 
-Deploy:
+# Edit with your actual values
+nano .env
 
-#+begin_src bash
-# Create data directory
-mkdir -p data
-
-# Initialize database
-docker compose run --rm telegram-note python init_db.py
-
-# Start bot
-docker compose up -d
-
-# View logs
-docker compose logs -f
+# Deploy!
+./deploy.sh
 #+end_src
+
+The deployment script will:
+1. Pull the latest image from GHCR (=ghcr.io/mandoo180/telegram-note-bot:latest=)
+2. Initialize the database
+3. Start the bot container
+4. Verify the deployment
 
 ** Step 4: Test
 
 1. Open Telegram
 2. Message your bot: =/start=
-3. Try: =/note test=
+3. Check version: =/version=
+4. Try creating a note: =/note test=
 
 ✅ *Your bot is now live!*
 
 ** Step 5: Auto-Start on Boot
 
+Ensure the bot container restarts automatically on system reboot:
+
 #+begin_src bash
+# The deploy.sh script already sets --restart unless-stopped
+# But you can also create a systemd service for more control:
+
 sudo tee /etc/systemd/system/telegram-note.service > /dev/null <<'EOF'
 [Unit]
 Description=Telegram Note Bot
@@ -115,9 +268,9 @@ Requires=docker.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-WorkingDirectory=/home/ubuntu/telegram-note
-ExecStart=/usr/bin/docker compose up -d
-ExecStop=/usr/bin/docker compose down
+WorkingDirectory=/home/ubuntu
+ExecStart=/usr/bin/docker start telegram-note-bot
+ExecStop=/usr/bin/docker stop telegram-note-bot
 User=ubuntu
 Group=ubuntu
 
@@ -127,12 +280,24 @@ EOF
 
 sudo systemctl daemon-reload
 sudo systemctl enable telegram-note
-sudo systemctl start telegram-note
 #+end_src
 
-* Docker Deployment
+Note: The container is already configured with =--restart unless-stopped= so this is optional.
 
-Comprehensive Docker deployment guide for any server.
+** Step 6: Update the Bot
+
+To update to a new version:
+
+#+begin_src bash
+# Simply re-run the deployment script
+./deploy.sh
+#+end_src
+
+This will pull the latest image and restart the bot while preserving your data.
+
+* Docker Deployment (From Source)
+
+Build and deploy from source code. Use this if you're developing or customizing the bot.
 
 ** Timezone Configuration (CRITICAL)
 
@@ -401,6 +566,50 @@ Add to crontab:
 
 ** Common Commands
 
+*** Using Deployment Script
+
+#+begin_src bash
+# Update to latest version
+./deploy.sh
+
+# View logs
+./deploy.sh --logs
+
+# Check status and version
+./deploy.sh --status
+#+end_src
+
+*** Using Docker Commands
+
+#+begin_src bash
+# View logs
+docker logs -f telegram-note-bot
+
+# Restart container
+docker restart telegram-note-bot
+
+# Stop container
+docker stop telegram-note-bot
+
+# Start container
+docker start telegram-note-bot
+
+# Update to latest image
+docker pull ghcr.io/mandoo180/telegram-note-bot:latest
+docker stop telegram-note-bot
+docker rm telegram-note-bot
+./deploy.sh
+
+# Backup database
+cp data/telegram_note.db data/backup-$(date +%Y%m%d).db
+
+# Restore database
+cp data/backup-20250113.db data/telegram_note.db
+docker restart telegram-note-bot
+#+end_src
+
+*** Using Docker Compose (Source Deployment)
+
 #+begin_src bash
 # View logs
 docker-compose logs -f
@@ -418,13 +627,22 @@ docker-compose up -d
 git pull
 docker-compose build --no-cache
 docker-compose up -d
+#+end_src
 
-# Backup database
-cp data/telegram_note.db data/backup-$(date +%Y%m%d).db
+** Image Management
 
-# Restore database
-cp data/backup-20250113.db data/telegram_note.db
-docker-compose restart
+#+begin_src bash
+# List local images
+docker images | grep telegram-note
+
+# Remove old images (cleanup)
+docker image prune -a
+
+# Pull specific version
+docker pull ghcr.io/mandoo180/telegram-note-bot:v1.0.0
+
+# Check current image
+docker inspect telegram-note-bot | grep Image
 #+end_src
 
 ** Database Maintenance
