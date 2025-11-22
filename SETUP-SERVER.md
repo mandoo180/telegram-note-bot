@@ -42,8 +42,8 @@ DATABASE_PATH=/app/data/telegram_note.db
 DATA_DIR=~/data/telegram-note-bot
 
 # Web App Configuration
-WEBAPP_BASE_URL=http://YOUR_SERVER_IP:8000
-WEBAPP_PORT=8000
+WEBAPP_BASE_URL=http://YOUR_SERVER_IP:8001
+WEBAPP_PORT=8001
 
 # Timezone Configuration
 TZ=Asia/Seoul
@@ -54,6 +54,7 @@ nano .env
 # Change:
 # - TELEGRAM_BOT_TOKEN to your actual token from @BotFather
 # - YOUR_SERVER_IP to your actual server IP
+# - WEBAPP_PORT if 8001 is also in use (default 8001)
 # - TZ to your timezone
 
 # 5. Check configuration

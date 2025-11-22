@@ -9,6 +9,7 @@ GITHUB_USER="${GITHUB_USER:-mandoo180}"
 REPO_NAME="${REPO_NAME:-telegram-note-bot}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 CONTAINER_NAME="telegram-note-bot"
+WEBAPP_PORT="${WEBAPP_PORT:-8000}"
 
 # Data directory: defaults to ./data, but can be customized
 # Examples:
@@ -66,6 +67,17 @@ check_env() {
         fi
     fi
 
+    # Read WEBAPP_PORT from .env if not already set via environment variable
+    if [ -z "${WEBAPP_PORT_FROM_ENV:-}" ]; then
+        if grep -q "^WEBAPP_PORT=" .env; then
+            ENV_WEBAPP_PORT=$(grep "^WEBAPP_PORT=" .env | cut -d '=' -f2- | tr -d '"' | tr -d "'")
+            if [ -n "$ENV_WEBAPP_PORT" ]; then
+                WEBAPP_PORT="$ENV_WEBAPP_PORT"
+                log_info "Using WEBAPP_PORT from .env: ${WEBAPP_PORT}"
+            fi
+        fi
+    fi
+
     log_info "Environment configuration OK"
 }
 
@@ -114,12 +126,14 @@ create_data_dir() {
 
 start_container() {
     log_info "Starting new container..."
+    log_info "Port mapping: ${WEBAPP_PORT}:8000 (host:container)"
 
     docker run -d \
         --name "${CONTAINER_NAME}" \
         --restart unless-stopped \
         --env-file .env \
         -e DATABASE_PATH=/app/data/telegram_note.db \
+        -p "${WEBAPP_PORT}:8000" \
         -v "${DATA_DIR}:/app/data" \
         "ghcr.io/${GITHUB_USER}/${REPO_NAME}:${IMAGE_TAG}"
 
@@ -167,6 +181,8 @@ show_config() {
     echo "  Data directory:   ${DATA_DIR}"
     echo "  Database path:    ${DATA_DIR}/telegram_note.db"
     echo "  .env file:        $(pwd)/.env"
+    echo "  Port mapping:     ${WEBAPP_PORT}:8000 (host:container)"
+    echo "  Web App URL:      http://YOUR_SERVER_IP:${WEBAPP_PORT}"
     echo ""
 
     if [ -f .env ]; then
